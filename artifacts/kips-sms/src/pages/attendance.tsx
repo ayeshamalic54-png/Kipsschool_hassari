@@ -3,7 +3,7 @@ import { useListAttendance, useMarkAttendance, useListStudents, useListStaff, ge
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,7 +12,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Loader2, Printer } from "lucide-react";
+import { Plus, Loader2, Printer, CheckCircle, XCircle, Clock, Umbrella, Users } from "lucide-react";
+import { motion } from "framer-motion";
 
 const schema = z.object({
   type: z.enum(["student", "staff"]),
@@ -47,6 +48,12 @@ export default function Attendance() {
 
   const watchType = form.watch("type");
 
+  const present = attendance?.filter(a => a.status === "present").length ?? 0;
+  const absent = attendance?.filter(a => a.status === "absent").length ?? 0;
+  const late = attendance?.filter(a => a.status === "late").length ?? 0;
+  const leave = attendance?.filter(a => a.status === "leave").length ?? 0;
+  const total = (attendance?.length ?? 0);
+
   const onSubmit = (values: z.infer<typeof schema>) => {
     const data = {
       type: values.type,
@@ -66,12 +73,22 @@ export default function Attendance() {
     });
   };
 
+  const summaryCards = [
+    { label: "Total", value: total, icon: Users, gradient: "from-blue-500 to-cyan-500" },
+    { label: "Present", value: present, icon: CheckCircle, gradient: "from-emerald-500 to-green-500" },
+    { label: "Absent", value: absent, icon: XCircle, gradient: "from-red-500 to-rose-600" },
+    { label: "Late", value: late, icon: Clock, gradient: "from-amber-400 to-orange-500" },
+    { label: "Leave", value: leave, icon: Umbrella, gradient: "from-blue-400 to-indigo-500" },
+  ];
+
+  const dateLabel = new Date(dateFilter + "T00:00:00").toLocaleDateString("en-PK", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
-          <p className="text-gray-500 text-sm mt-1">Daily attendance tracking</p>
+          <p className="text-gray-500 text-sm mt-1">Daily attendance tracking — {dateLabel}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print-attendance"><Printer className="w-4 h-4 mr-1" /> Print</Button>
@@ -93,17 +110,17 @@ export default function Attendance() {
                           <SelectItem value="student">Student</SelectItem>
                           <SelectItem value="staff">Staff</SelectItem>
                         </SelectContent>
-                      </Select>
+                      </Select><FormMessage />
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="personId" render={({ field }) => (
                     <FormItem><FormLabel>{watchType === "student" ? "Student" : "Staff Member"} *</FormLabel>
                       <Select onValueChange={field.onChange}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger></FormControl>
+                        <FormControl><SelectTrigger><SelectValue placeholder={`Select ${watchType}`} /></SelectTrigger></FormControl>
                         <SelectContent>
                           {watchType === "student"
-                            ? students?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)
-                            : staff?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)
+                            ? students?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} — {s.className}</SelectItem>)
+                            : staff?.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.role})</SelectItem>)
                           }
                         </SelectContent>
                       </Select><FormMessage />
@@ -117,10 +134,10 @@ export default function Attendance() {
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                         <SelectContent>
-                          <SelectItem value="present">Present</SelectItem>
-                          <SelectItem value="absent">Absent</SelectItem>
-                          <SelectItem value="late">Late</SelectItem>
-                          <SelectItem value="leave">Leave</SelectItem>
+                          <SelectItem value="present">✅ Present</SelectItem>
+                          <SelectItem value="absent">❌ Absent</SelectItem>
+                          <SelectItem value="late">🕐 Late</SelectItem>
+                          <SelectItem value="leave">🏖️ Leave</SelectItem>
                         </SelectContent>
                       </Select>
                     </FormItem>
@@ -136,6 +153,31 @@ export default function Attendance() {
             </DialogContent>
           </Dialog>
         </div>
+      </div>
+
+      <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+        {summaryCards.map((card, i) => (
+          <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: i * 0.05 }}>
+            <Card className="overflow-hidden border-0 shadow-sm">
+              <CardContent className="p-0">
+                <div className={`bg-gradient-to-br ${card.gradient} p-4`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white/80 text-xs font-medium uppercase tracking-wide">{card.label}</p>
+                      {isLoading
+                        ? <Skeleton className="h-6 w-10 mt-1 bg-white/30" />
+                        : <p className="text-white text-2xl font-bold mt-1">{card.value}</p>
+                      }
+                    </div>
+                    <div className="bg-white/20 rounded-xl p-2">
+                      <card.icon className="w-5 h-5 text-white" />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ))}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -154,7 +196,7 @@ export default function Attendance() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr>
-                    {["#", "Name", "Class", "Date", "Type", "Status"].map(h => (
+                    {["#", "Name", "Class / Role", "Date", "Type", "Status"].map(h => (
                       <th key={h} className="text-left py-3 px-3 font-semibold text-gray-600">{h}</th>
                     ))}
                   </tr>

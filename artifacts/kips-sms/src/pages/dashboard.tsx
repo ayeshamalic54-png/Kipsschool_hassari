@@ -188,22 +188,28 @@ function AdminDashboard() {
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Today's Income",   key: "todayIncome",        icon: Banknote,     color: "border-l-emerald-500", isCurrency: true },
-            { label: "Today's Expenses", key: "todayExpenses",      icon: TrendingDown, color: "border-l-red-500",     isCurrency: true },
-            { label: "Fees Collected",   key: "todayFeeAmount",     icon: ReceiptText,  color: "border-l-blue-500",    isCurrency: true },
-            { label: "Receipts Today",   key: "todayFeesPaidCount", icon: BookOpen,     color: "border-l-purple-500" },
+            { label: "Today's Income",   key: "todayIncome",        icon: Banknote,     gradient: "from-emerald-500 to-teal-500",   isCurrency: true },
+            { label: "Today's Expenses", key: "todayExpenses",      icon: TrendingDown, gradient: "from-red-500 to-rose-600",        isCurrency: true },
+            { label: "Fees Collected",   key: "todayFeeAmount",     icon: ReceiptText,  gradient: "from-blue-500 to-cyan-500",       isCurrency: true },
+            { label: "Receipts Today",   key: "todayFeesPaidCount", icon: BookOpen,     gradient: "from-violet-500 to-purple-600" },
           ].map(card => (
             <motion.div key={card.key} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-              <Card className={`border-l-4 ${card.color} shadow-sm`}>
-                <CardContent className="p-4">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-medium text-gray-500">{card.label}</p>
-                    <card.icon className="w-4 h-4 text-gray-400" />
+              <Card className="overflow-hidden border-0 shadow-sm hover:shadow-md transition-shadow">
+                <CardContent className="p-0">
+                  <div className={`bg-gradient-to-br ${card.gradient} p-4`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-white/80 text-xs font-medium uppercase tracking-wide">{card.label}</p>
+                        {isLoading
+                          ? <Skeleton className="h-6 w-20 mt-1 bg-white/30" />
+                          : <p className="text-white text-xl font-bold mt-1">{fmt(stats?.[card.key as keyof typeof stats] as number, card.isCurrency)}</p>
+                        }
+                      </div>
+                      <div className="bg-white/20 rounded-xl p-2">
+                        <card.icon className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
                   </div>
-                  {isLoading
-                    ? <Skeleton className="h-6 w-20 mt-1" />
-                    : <p className="text-xl font-bold text-gray-900">{fmt(stats?.[card.key as keyof typeof stats] as number, card.isCurrency)}</p>
-                  }
                 </CardContent>
               </Card>
             </motion.div>

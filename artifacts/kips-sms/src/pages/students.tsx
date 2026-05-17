@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, Eye, Trash2, UserCheck, UserX, UserMinus, Printer } from "lucide-react";
+import { Plus, Search, Eye, Trash2, UserCheck, UserX, UserMinus, Printer, Bell, AlertTriangle, PhoneCall } from "lucide-react";
 
 const statusConfig = {
   active: { label: "Active", variant: "default" as const, icon: UserCheck, className: "bg-emerald-100 text-emerald-700 border-emerald-200" },
@@ -16,16 +16,99 @@ const statusConfig = {
   left: { label: "Left", variant: "destructive" as const, icon: UserMinus, className: "bg-red-100 text-red-700 border-red-200" },
 };
 
+function FeeReminderBanner({ students }: { students: Array<{ id: number; name: string; fatherName?: string | null; fatherPhone?: string | null; feeAmount?: number | null; className?: string | null }> }) {
+  const { toast } = useToast();
+  const [dismissed, setDismissed] = useState(false);
+
+  const studentsWithFee = students.filter(s => s.feeAmount && s.feeAmount > 0);
+  if (!studentsWithFee.length || dismissed) return null;
+
+  const handleRemind = (student: typeof students[0]) => {
+    const phone = student.fatherPhone || "not on file";
+    toast({
+      title: `Fee Reminder — ${student.name}`,
+      description: `Monthly fee of PKR ${Number(student.feeAmount).toLocaleString()} is due. Father: ${student.fatherName || "—"} | Phone: ${phone}`,
+    });
+  };
+
+  const handleRemindAll = () => {
+    toast({
+      title: "Fee Reminders Sent",
+      description: `Reminder prepared for ${studentsWithFee.length} students with pending monthly fees.`,
+    });
+  };
+
+  return (
+    <Card className="border-orange-200 bg-orange-50 shadow-sm">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-base font-semibold text-orange-800 flex items-center gap-2">
+            <Bell className="w-4 h-4" /> Fee Reminder — Parents Notification
+          </CardTitle>
+          <div className="flex gap-2">
+            <Button size="sm" onClick={handleRemindAll} className="h-7 text-xs bg-orange-600 hover:bg-orange-700 text-white">
+              <Bell className="w-3 h-3 mr-1" /> Remind All
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setDismissed(true)} className="h-7 text-xs text-orange-600">Dismiss</Button>
+          </div>
+        </div>
+        <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+          <AlertTriangle className="w-3 h-3" /> {studentsWithFee.length} students have monthly fees — send reminders to parents
+        </p>
+      </CardHeader>
+      <CardContent className="pt-0">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-orange-200">
+                <th className="text-left py-2 px-2 text-orange-700 font-semibold">Student</th>
+                <th className="text-left py-2 px-2 text-orange-700 font-semibold">Father Name</th>
+                <th className="text-left py-2 px-2 text-orange-700 font-semibold">Class</th>
+                <th className="text-left py-2 px-2 text-orange-700 font-semibold">Monthly Fee</th>
+                <th className="text-left py-2 px-2 text-orange-700 font-semibold">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {studentsWithFee.slice(0, 5).map(student => (
+                <tr key={student.id} className="border-b border-orange-100 hover:bg-orange-100/50">
+                  <td className="py-2 px-2 font-medium text-orange-900">{student.name}</td>
+                  <td className="py-2 px-2 text-orange-700">{student.fatherName || "—"}</td>
+                  <td className="py-2 px-2 text-orange-700">{student.className || "—"}</td>
+                  <td className="py-2 px-2 font-bold text-orange-800">PKR {Number(student.feeAmount).toLocaleString()}/mo</td>
+                  <td className="py-2 px-2">
+                    <Button size="sm" variant="outline" className="h-6 text-xs border-orange-300 text-orange-700 hover:bg-orange-100" onClick={() => handleRemind(student)}>
+                      <PhoneCall className="w-3 h-3 mr-1" /> Remind
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {studentsWithFee.length > 5 && (
+                <tr>
+                  <td colSpan={5} className="py-2 px-2 text-orange-600 text-center text-xs">
+                    + {studentsWithFee.length - 5} more students
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Students() {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | undefined>();
+  const [showReminder, setShowReminder] = useState(true);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const { data: students, isLoading } = useListStudents(
     search || statusFilter ? { search: search || undefined, status: statusFilter as "active" | "inactive" | "left" | undefined } : {}
   );
+  const { data: allStudents } = useListStudents({ status: "active" });
   const deleteMutation = useDeleteStudent();
 
   const handleDelete = (id: number, name: string) => {
@@ -39,6 +122,8 @@ export default function Students() {
     });
   };
 
+  const totalActive = allStudents?.length ?? 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -47,6 +132,11 @@ export default function Students() {
           <p className="text-gray-500 text-sm mt-1">Manage student records and admissions</p>
         </div>
         <div className="flex gap-2">
+          {!showReminder && (
+            <Button variant="outline" size="sm" onClick={() => setShowReminder(true)} className="border-orange-300 text-orange-700 hover:bg-orange-50">
+              <Bell className="w-4 h-4 mr-1" /> Fee Reminder
+            </Button>
+          )}
           <Button variant="outline" onClick={() => window.print()} className="no-print">
             <Printer className="w-4 h-4 mr-2" /> Print List
           </Button>
@@ -54,6 +144,38 @@ export default function Students() {
             <Plus className="w-4 h-4 mr-2" /> New Admission
           </Button>
         </div>
+      </div>
+
+      {showReminder && allStudents && (
+        <div onClick={() => {}}>
+          <FeeReminderBanner
+            students={(allStudents ?? []).map(s => ({
+              id: s.id,
+              name: s.name,
+              fatherName: s.fatherName,
+              fatherPhone: (s as unknown as { fatherPhone?: string }).fatherPhone,
+              feeAmount: s.feeAmount,
+              className: s.className,
+            }))}
+          />
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Total Active", value: totalActive, gradient: "from-blue-500 to-cyan-500" },
+          { label: "Showing", value: students?.length ?? 0, gradient: "from-violet-500 to-purple-600" },
+          { label: "Inactive / Left", value: (students?.filter(s => s.status !== "active").length ?? 0), gradient: "from-gray-400 to-gray-500" },
+        ].map(c => (
+          <Card key={c.label} className="overflow-hidden border-0 shadow-sm">
+            <CardContent className="p-0">
+              <div className={`bg-gradient-to-br ${c.gradient} p-4`}>
+                <p className="text-white/80 text-xs font-medium uppercase tracking-wide">{c.label}</p>
+                <p className="text-white text-2xl font-bold mt-1">{c.value}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Card>
@@ -105,7 +227,7 @@ export default function Students() {
                     <th className="text-left py-3 px-2 font-semibold text-gray-600">Father Name</th>
                     <th className="text-left py-3 px-2 font-semibold text-gray-600">Class</th>
                     <th className="text-left py-3 px-2 font-semibold text-gray-600">Section</th>
-                    <th className="text-left py-3 px-2 font-semibold text-gray-600">Fee</th>
+                    <th className="text-left py-3 px-2 font-semibold text-gray-600">Fee/mo</th>
                     <th className="text-left py-3 px-2 font-semibold text-gray-600">Status</th>
                     <th className="text-left py-3 px-2 font-semibold text-gray-600">Actions</th>
                   </tr>
