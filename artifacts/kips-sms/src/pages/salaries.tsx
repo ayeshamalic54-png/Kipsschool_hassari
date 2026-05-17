@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useListSalaries, useCreateSalary, usePaySalary, useListStaff, getListSalariesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Loader2, Printer, FileText, X } from "lucide-react";
+import { Plus, Loader2, Printer, FileText, X, RefreshCw, CheckCircle } from "lucide-react";
 
 const schema = z.object({
   staffId: z.string().min(1, "Staff required"),
@@ -40,12 +40,40 @@ type Salary = {
   paidDate?: string | null;
 };
 
+function authHeader() {
+  const token = localStorage.getItem("kips_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 function SalarySlip({ salary, onClose }: { salary: Salary; onClose: () => void }) {
   const slipRef = useRef<HTMLDivElement>(null);
+  const [attLoading, setAttLoading] = useState(false);
+  const [attLoaded, setAttLoaded] = useState(false);
+
   const form = useForm<z.infer<typeof deductionSchema>>({
     resolver: zodResolver(deductionSchema),
     defaultValues: { absentDays: "0", lateDays: "0", tax: "0", otherDeduction: "0", otherDeductionLabel: "", allowance: "0", allowanceLabel: "" },
   });
+
+  // Auto-load attendance when slip opens
+  useEffect(() => {
+    if (!salary.staffId || !salary.month) return;
+    const month = salary.month.slice(0, 7); // YYYY-MM
+    setAttLoading(true);
+    fetch(`/api/attendance/summary?month=${month}&type=staff&staffId=${salary.staffId}`, {
+      headers: authHeader() as HeadersInit,
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data && typeof data.absent === "number") {
+          form.setValue("absentDays", String(data.absent));
+          form.setValue("lateDays", String(data.late));
+          setAttLoaded(true);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setAttLoading(false));
+  }, [salary.staffId, salary.month]);
 
   const values = form.watch();
   const basicSalary = salary.amount;
@@ -59,7 +87,7 @@ function SalarySlip({ salary, onClose }: { salary: Salary; onClose: () => void }
   const netSalary = basicSalary + allowance - totalDeductions;
 
   const monthLabel = salary.month
-    ? new Date(salary.month + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" })
+    ? new Date(salary.month.slice(0, 7) + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" })
     : salary.month;
 
   const handlePrint = () => {
@@ -96,7 +124,13 @@ function SalarySlip({ salary, onClose }: { salary: Salary; onClose: () => void }
 
         <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide border-b pb-2">Enter Deductions & Allowances</h3>
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Deductions & Allowances</h3>
+              {attLoading && <span className="text-xs text-blue-500 flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" /> Loading attendance...</span>}
+              {attLoaded && !attLoading && (
+                <span className="text-xs text-emerald-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Auto-loaded from records</span>
+              )}
+            </div>
             <Form {...form}>
               <form className="space-y-3">
                 <div className="grid grid-cols-2 gap-3">
@@ -104,12 +138,14 @@ function SalarySlip({ salary, onClose }: { salary: Salary; onClose: () => void }
                     <FormItem>
                       <FormLabel className="text-xs">Absent Days</FormLabel>
                       <FormControl><Input type="number" min="0" {...field} className="h-8 text-sm" /></FormControl>
+                      {absentDed > 0 && <p className="text-xs text-red-500">-PKR {absentDed.toLocaleString()}</p>}
                     </FormItem>
                   )} />
                   <FormField control={form.control} name="lateDays" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-xs">Late Days (½ day)</FormLabel>
                       <FormControl><Input type="number" min="0" {...field} className="h-8 text-sm" /></FormControl>
+                      {lateDed > 0 && <p className="text-xs text-red-500">-PKR {lateDed.toLocaleString()}</p>}
                     </FormItem>
                   )} />
                 </div>
@@ -149,10 +185,14 @@ function SalarySlip({ salary, onClose }: { salary: Salary; onClose: () => void }
                 </div>
               </form>
             </Form>
-            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-1">
-              <div>Per day rate: PKR {perDay.toLocaleString()}</div>
-              <div className="text-red-600">Total Deductions: PKR {totalDeductions.toLocaleString()}</div>
-              <div className="text-emerald-600 font-bold text-sm">Net Salary: PKR {netSalary.toLocaleString()}</div>
+            <div className="mt-3 p-3 bg-blue-50 rounded-lg text-xs text-blue-700 space-y-1 border border-blue-100">
+              <div className="flex justify-between"><span>Basic Salary:</span><span className="font-semibold">PKR {basicSalary.toLocaleString()}</span></div>
+              <div className="flex justify-between"><span>Per Day Rate:</span><span>PKR {perDay.toLocaleString()}</span></div>
+              {allowance > 0 && <div className="flex justify-between text-emerald-600"><span>+ Allowance:</span><span>PKR {allowance.toLocaleString()}</span></div>}
+              <div className="flex justify-between text-red-600"><span>Total Deductions:</span><span>-PKR {totalDeductions.toLocaleString()}</span></div>
+              <div className="flex justify-between text-emerald-700 font-bold text-sm border-t pt-1 mt-1">
+                <span>NET SALARY:</span><span>PKR {netSalary.toLocaleString()}</span>
+              </div>
             </div>
           </div>
 
@@ -169,6 +209,8 @@ function SalarySlip({ salary, onClose }: { salary: Salary; onClose: () => void }
                 <tr><td style={{ padding: "3px 6px", border: "1px solid #ddd", fontWeight: 600 }}>Employee</td><td style={{ padding: "3px 6px", border: "1px solid #ddd" }}>{salary.staffName}</td></tr>
                 <tr><td style={{ padding: "3px 6px", border: "1px solid #ddd", fontWeight: 600 }}>Month</td><td style={{ padding: "3px 6px", border: "1px solid #ddd" }}>{monthLabel}</td></tr>
                 <tr><td style={{ padding: "3px 6px", border: "1px solid #ddd", fontWeight: 600 }}>Working Days</td><td style={{ padding: "3px 6px", border: "1px solid #ddd" }}>26</td></tr>
+                <tr><td style={{ padding: "3px 6px", border: "1px solid #ddd", fontWeight: 600 }}>Absent Days</td><td style={{ padding: "3px 6px", border: "1px solid #ddd", color: "#dc2626" }}>{values.absentDays || 0}</td></tr>
+                <tr><td style={{ padding: "3px 6px", border: "1px solid #ddd", fontWeight: 600 }}>Late Days</td><td style={{ padding: "3px 6px", border: "1px solid #ddd", color: "#f59e0b" }}>{values.lateDays || 0}</td></tr>
               </tbody>
             </table>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
@@ -255,10 +297,10 @@ export default function Salaries() {
           <p className="text-gray-500 text-sm mt-1">Staff salary management & payslips with deductions</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => window.print()} data-testid="button-print-salaries"><Printer className="w-4 h-4 mr-1" /> Print</Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()}><Printer className="w-4 h-4 mr-1" /> Print</Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white" data-testid="button-add-salary">
+              <Button className="bg-gradient-to-r from-cyan-600 to-blue-600 text-white">
                 <Plus className="w-4 h-4 mr-2" /> Add Record
               </Button>
             </DialogTrigger>
@@ -294,9 +336,9 @@ export default function Salaries() {
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total Records", value: (salaries?.length ?? 0).toString(), gradient: "from-blue-500 to-cyan-500", isCurrency: false },
-          { label: "Total Paid", value: `PKR ${totalPaid.toLocaleString()}`, gradient: "from-emerald-500 to-green-500", isCurrency: true },
-          { label: "Pending", value: `PKR ${totalPending.toLocaleString()}`, gradient: "from-red-500 to-rose-600", isCurrency: true },
+          { label: "Total Records", value: (salaries?.length ?? 0).toString(), gradient: "from-blue-500 to-cyan-500" },
+          { label: "Total Paid", value: `PKR ${totalPaid.toLocaleString()}`, gradient: "from-emerald-500 to-green-500" },
+          { label: "Pending", value: `PKR ${totalPending.toLocaleString()}`, gradient: "from-red-500 to-rose-600" },
         ].map(c => (
           <Card key={c.label} className="overflow-hidden border-0 shadow-sm">
             <CardContent className="p-0">
@@ -311,7 +353,7 @@ export default function Salaries() {
 
       <div className="flex gap-2">
         {[{ val: undefined, label: "All" }, { val: "paid", label: "Paid" }, { val: "unpaid", label: "Unpaid" }].map(f => (
-          <Button key={f.label} size="sm" variant={statusFilter === f.val ? "default" : "outline"} onClick={() => setStatusFilter(f.val)} data-testid={`button-filter-${f.label.toLowerCase()}`}>{f.label}</Button>
+          <Button key={f.label} size="sm" variant={statusFilter === f.val ? "default" : "outline"} onClick={() => setStatusFilter(f.val)}>{f.label}</Button>
         ))}
       </div>
 
@@ -331,7 +373,7 @@ export default function Salaries() {
                   {!salaries?.length ? (
                     <tr><td colSpan={6} className="py-12 text-center text-gray-400">No salary records found</td></tr>
                   ) : salaries?.map(sal => (
-                    <tr key={sal.id} className="border-b hover:bg-gray-50" data-testid={`row-salary-${sal.id}`}>
+                    <tr key={sal.id} className="border-b hover:bg-gray-50">
                       <td className="py-3 px-3 font-medium text-gray-900">{sal.staffName || "—"}</td>
                       <td className="py-3 px-3 text-gray-600">{sal.month}</td>
                       <td className="py-3 px-3 font-bold text-gray-900">PKR {sal.amount.toLocaleString()}</td>
@@ -339,13 +381,13 @@ export default function Salaries() {
                       <td className="py-3 px-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${sal.status === "paid" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-red-100 text-red-700 border-red-200"}`}>{sal.status}</span>
                       </td>
-                      <td className="py-3 px-3 print:hidden">
+                      <td className="py-3 px-3">
                         <div className="flex items-center gap-1">
-                          <Button size="sm" variant="outline" className="h-7 text-xs border-blue-200 text-blue-600 hover:bg-blue-50" onClick={() => setSlipSalary(sal as Salary)} data-testid={`button-slip-${sal.id}`}>
+                          <Button size="sm" variant="outline" className="h-7 text-xs border-blue-200 text-blue-600 hover:bg-blue-50" onClick={() => setSlipSalary(sal as Salary)}>
                             <FileText className="w-3 h-3 mr-1" /> Slip
                           </Button>
                           {sal.status === "unpaid" && (
-                            <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handlePay(sal.id)} disabled={payMutation.isPending} data-testid={`button-pay-salary-${sal.id}`}>Pay</Button>
+                            <Button size="sm" className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => handlePay(sal.id)} disabled={payMutation.isPending}>Pay</Button>
                           )}
                         </div>
                       </td>
