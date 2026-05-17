@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Upload, Trash2, RefreshCw, Shield, Database, Clock, CheckCircle, CalendarClock, Play, AlertCircle, Zap } from "lucide-react";
+import { Download, Upload, Trash2, RefreshCw, Shield, Database, Clock, CheckCircle, CalendarClock, Play, AlertCircle, Zap, RotateCcw } from "lucide-react";
 
 interface SavedBackup {
   filename: string;
@@ -147,47 +147,70 @@ export default function Settings() {
     }
   };
 
+  const confirmAndRestore = (d: { students?: unknown[]; fees?: unknown[]; attendance?: unknown[]; salaries?: unknown[]; accountEntries?: unknown[] }, timestamp: string) => {
+    const students = d?.students?.length ?? 0;
+    const fees = d?.fees?.length ?? 0;
+    const attendance = d?.attendance?.length ?? 0;
+    const salaries = d?.salaries?.length ?? 0;
+    const accounts = d?.accountEntries?.length ?? 0;
+    const warning = students === 0
+      ? `⚠️ KHABARDAR: Is backup mein koi student nahi hai (0 students)!\n\nAgar restore karo ge toh saare students delete ho jayein ge!\n\nBackup ka waqt: ${timestamp}\n\nKya aap PAKKA restore karna chahte hain?`
+      : `Backup contents:\n• Students: ${students}\n• Fees: ${fees}\n• Attendance: ${attendance}\n• Salaries: ${salaries}\n• Accounts: ${accounts}\n\nBackup time: ${timestamp}\n\nYeh saara current data replace kar dega. Restore karna hai?`;
+    return confirm(warning);
+  };
+
+  const showRestoreResult = (data: { studentsRestored?: number; preBackup?: string; errors?: string[] }) => {
+    const count = data.studentsRestored ?? 0;
+    const errs = data.errors ?? [];
+    if (errs.length > 0) {
+      toast({ variant: "destructive", title: `Restore with ${errs.length} errors`, description: `Students restored: ${count}. Errors: ${errs.slice(0, 2).join("; ")}` });
+    } else {
+      toast({ title: `Restore complete ✓  (${count} students restored)`, description: `Safety backup: ${data.preBackup}` });
+    }
+  };
+
   const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    let backup: { data?: { students?: unknown[]; fees?: unknown[]; attendance?: unknown[]; salaries?: unknown[]; accountEntries?: unknown[] }; timestamp?: string };
     try {
-      const text = await file.text();
-      const backup = JSON.parse(text);
-      const d = backup?.data;
-      const students = d?.students?.length ?? 0;
-      const fees = d?.fees?.length ?? 0;
-      const attendance = d?.attendance?.length ?? 0;
-      const salaries = d?.salaries?.length ?? 0;
-      const accounts = d?.accountEntries?.length ?? 0;
-
-      const warning = students === 0
-        ? `⚠️ KHABARDAR: Is backup mein koi student nahi hai (0 students)!\n\nAgar restore karo ge toh saare students delete ho jayein ge!\n\nBackup ka waqt: ${backup.timestamp ?? "unknown"}\n\nKya aap PAKKA restore karna chahte hain?`
-        : `Backup contents:\n• Students: ${students}\n• Fees: ${fees}\n• Attendance: ${attendance}\n• Salaries: ${salaries}\n• Accounts: ${accounts}\n\nBackup time: ${backup.timestamp ?? "unknown"}\n\nYeh saara current data replace kar dega. Restore karna hai?`;
-
-      if (!confirm(warning)) {
+      backup = JSON.parse(await file.text());
+      if (!confirmAndRestore(backup.data ?? {}, backup.timestamp ?? "unknown")) {
         e.target.value = ""; return;
       }
     } catch {
       toast({ variant: "destructive", title: "Invalid backup file", description: "File parse nahi ho saki" });
       e.target.value = ""; return;
     }
-
     setRestoring(true);
     try {
-      const text = await file.text();
-      const backup = JSON.parse(text);
-      const res = await apiFetch("/restore", {
-        method: "POST",
-        body: JSON.stringify(backup),
-      });
-      const data = await res.json();
-      toast({ title: "Restore complete ✓", description: `Pre-restore backup saved: ${data.preBackup}` });
+      const res = await apiFetch("/restore", { method: "POST", body: JSON.stringify(backup) });
+      showRestoreResult(await res.json());
       await loadBackups();
     } catch (err: unknown) {
       toast({ variant: "destructive", title: "Restore failed", description: String(err) });
     } finally {
       setRestoring(false);
       e.target.value = "";
+    }
+  };
+
+  const restoreFromServer = async (filename: string) => {
+    setRestoring(true);
+    try {
+      // First fetch the backup to show confirmation
+      const peekRes = await apiFetch(`/backups/${encodeURIComponent(filename)}`);
+      const backup = await peekRes.json();
+      if (!confirmAndRestore(backup.data ?? {}, backup.timestamp ?? filename)) {
+        setRestoring(false); return;
+      }
+      const res = await apiFetch(`/restore-from-server/${encodeURIComponent(filename)}`, { method: "POST" });
+      showRestoreResult(await res.json());
+      await loadBackups();
+    } catch (err: unknown) {
+      toast({ variant: "destructive", title: "Restore failed", description: String(err) });
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -377,6 +400,9 @@ export default function Settings() {
                     </p>
                   </div>
                   <div className="flex gap-2">
+                    <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => restoreFromServer(b.filename)} disabled={restoring}>
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Restore
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => downloadSaved(b.filename)}>
                       <Download className="w-3.5 h-3.5" />
                     </Button>
