@@ -1,0 +1,366 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 98%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 262 83% 96%;
+    --accent-foreground: 262 83% 58%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 262 83% 58%;
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 262 83% 58%;
+    
+    --chart-1: 346 87% 60%; /* Pink */
+    --chart-2: 160 84% 39%; /* Teal */
+    --chart-3: 30 100% 60%; /* Orange */
+    --chart-4: 262 83% 58%; /* Purple */
+    --chart-5: 0 84% 60%; /* Red */
+
+    --app-font-sans: 'Inter', system-ui, sans-serif;
+    --app-font-serif: Georgia, serif;
+    --app-font-mono: Menlo, monospace;
+  }
+
+  .dark {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 240 10% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 240 10% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 3.7% 15.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 240 3.7% 15.9%;
+    --muted-foreground: 240 5% 64.9%;
+    --accent: 240 3.7% 15.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 3.7% 15.9%;
+    --input: 240 3.7% 15.9%;
+    --ring: 262 83% 58%;
+    
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 262 83% 58%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 262 83% 58%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+  }
+}
+
+@media print {
+  /* ─────────────────────────────────────────────────────────
+     @page margin: 0  →  removes the browser's built-in
+     header (date / URL / title) and footer (page numbers).
+     All whitespace comes from body padding instead.
+  ───────────────────────────────────────────────────────── */
+  @page {
+    margin: 0;
+    size: A4 portrait;
+  }
+
+  /* ── Base reset ── */
+  html {
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+    font-size: 11pt !important;
+    font-family: Arial, Helvetica, sans-serif !important;
+    padding: 1.4cm 1.8cm !important;
+    margin: 0 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── Hide UI chrome ── */
+  .no-print,
+  .print\:hidden,
+  button,
+  [role="button"],
+  [data-radix-scroll-area-scrollbar],
+  [data-radix-scroll-area-corner],
+  [class*="animate-pulse"] {
+    display: none !important;
+  }
+
+  /* ── Fix layout: sidebar gone, content fills page ── */
+  .flex.h-screen,
+  .flex-col.min-w-0 {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* ── Critical: Radix ScrollArea traps content inside overflow:hidden.
+        Override all Radix scroll containers so content flows freely. ── */
+  [data-radix-scroll-area-root],
+  [data-radix-scroll-area-viewport],
+  [data-radix-scroll-area-viewport] > div {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    transform: none !important;
+    will-change: auto !important;
+  }
+
+  #printable-area {
+    padding: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* ── Fix all gradient backgrounds → plain white/light ── */
+  [class*="bg-gradient"],
+  [class*="from-"],
+  [class*="to-"] {
+    background: #f0f0f0 !important;
+    background-image: none !important;
+  }
+
+  /* ── Force all text to be dark and readable ── */
+  * {
+    color: #111 !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+  }
+
+  /* ── Tables: clean borders, no background noise ── */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    font-size: 10pt !important;
+  }
+
+  th {
+    background: #1a2a5e !important;
+    color: #fff !important;
+    font-weight: bold !important;
+    padding: 6pt 8pt !important;
+    border: 1pt solid #1a2a5e !important;
+    text-align: left !important;
+  }
+
+  td {
+    padding: 5pt 8pt !important;
+    border: 0.5pt solid #ccc !important;
+    color: #111 !important;
+    background: #fff !important;
+  }
+
+  tr:nth-child(even) td {
+    background: #f8f8f8 !important;
+  }
+
+  /* ── Cards → simple boxes ── */
+  [class*="rounded"],
+  .card,
+  [class*="Card"] {
+    border: 0.5pt solid #ccc !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+
+  /* ── Status badges → readable with border ── */
+  [class*="rounded-full"] {
+    border: 0.5pt solid #555 !important;
+    background: #fff !important;
+    color: #111 !important;
+    padding: 1pt 4pt !important;
+    font-size: 9pt !important;
+  }
+
+  /* ── Specific status colors that should still show ── */
+  .bg-emerald-100 { background: #d1fae5 !important; }
+  .bg-red-100     { background: #fee2e2 !important; }
+  .bg-amber-100   { background: #fef3c7 !important; }
+
+  /* ── Headings ── */
+  h1 { font-size: 16pt !important; font-weight: bold !important; color: #1a2a5e !important; margin-bottom: 6pt !important; }
+  h2 { font-size: 13pt !important; font-weight: bold !important; color: #1a2a5e !important; }
+  h3 { font-size: 11pt !important; font-weight: bold !important; color: #222 !important; }
+
+  /* ── Page breaks ── */
+  .page-break { page-break-after: always; }
+  tr { page-break-inside: avoid; }
+
+  /* ── Buttons: completely hidden ── */
+  button, [role="button"] {
+    display: none !important;
+  }
+
+  /* ── Skeleton loaders: hide ── */
+  [class*="animate-pulse"],
+  [class*="skeleton"] {
+    display: none !important;
+  }
+
+  /* ── Global print header — centered logo + school name ── */
+  .print-header {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    text-align: center !important;
+    border-bottom: 2pt solid #1a2a5e !important;
+    padding-bottom: 12pt !important;
+    margin-bottom: 16pt !important;
+    width: 100% !important;
+  }
+
+  .print-header img {
+    width: 64pt !important;
+    height: 64pt !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    margin-bottom: 6pt !important;
+    display: block !important;
+  }
+
+  .print-header-text {
+    text-align: center !important;
+  }
+
+  .print-header-title {
+    font-size: 18pt !important;
+    font-weight: bold !important;
+    color: #1a2a5e !important;
+    line-height: 1.2 !important;
+  }
+
+  .print-header-sub {
+    font-size: 10pt !important;
+    color: #555 !important;
+    margin-top: 2pt !important;
+  }
+
+  .print-header-date {
+    font-size: 9pt !important;
+    color: #888 !important;
+    margin-top: 2pt !important;
+  }
+
+  /* ── Gradient stat cards on dashboard → simple bordered boxes ── */
+  [class*="p-4"][class*="bg-gradient"] {
+    background: #fff !important;
+    border: 1pt solid #ccc !important;
+    padding: 8pt !important;
+  }
+
+  /* ── Links ── */
+  a { text-decoration: none !important; color: #111 !important; }
+
+  /* ── Hide cursor in print ── */
+  * {
+    cursor: none !important;
+    caret-color: transparent !important;
+  }
+}

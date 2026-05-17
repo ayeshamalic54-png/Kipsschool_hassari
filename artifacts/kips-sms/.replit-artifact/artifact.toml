@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "KIPS School Management System"
+version = "1.0.0"
+id = "artifacts/kips-sms"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25329
+
+[services.development]
+run = "pnpm --filter @workspace/kips-sms run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/kips-sms", "run", "build" ]
+publicDir = "artifacts/kips-sms/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25329"
+BASE_PATH = "/"

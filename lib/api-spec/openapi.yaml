@@ -3,20 +3,40 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: KIPS School Management System API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
+  - name: students
+    description: Student management
+  - name: classes
+    description: Class and section management
+  - name: fees
+    description: Fee management
+  - name: attendance
+    description: Attendance tracking
+  - name: exams
+    description: Exam and results
+  - name: staff
+    description: Staff and salary management
+  - name: accounts
+    description: Accounts and finance
+  - name: certificates
+    description: Certificate generation
+  - name: dashboard
+    description: Dashboard statistics
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +44,665 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Unauthorized
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /auth/change-password:
+    post:
+      operationId: changePassword
+      tags: [auth]
+      summary: Change password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          description: Password changed
+
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+
+  /students:
+    get:
+      operationId: listStudents
+      tags: [students]
+      summary: List students
+      parameters:
+        - name: classId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [active, inactive, left, null]
+        - name: search
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: List of students
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Student"
+    post:
+      operationId: createStudent
+      tags: [students]
+      summary: Create student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentInput"
+      responses:
+        "201":
+          description: Student created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+
+  /students/{id}:
+    get:
+      operationId: getStudent
+      tags: [students]
+      summary: Get student by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Student details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+    patch:
+      operationId: updateStudent
+      tags: [students]
+      summary: Update student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StudentUpdate"
+      responses:
+        "200":
+          description: Updated student
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Student"
+    delete:
+      operationId: deleteStudent
+      tags: [students]
+      summary: Delete student
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /classes:
+    get:
+      operationId: listClasses
+      tags: [classes]
+      summary: List classes
+      responses:
+        "200":
+          description: List of classes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Class"
+    post:
+      operationId: createClass
+      tags: [classes]
+      summary: Create class
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClassInput"
+      responses:
+        "201":
+          description: Class created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Class"
+
+  /fees:
+    get:
+      operationId: listFees
+      tags: [fees]
+      summary: List fee records
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [paid, unpaid, partial, null]
+        - name: month
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Fee records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeeRecord"
+    post:
+      operationId: createFee
+      tags: [fees]
+      summary: Create fee record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeeInput"
+      responses:
+        "201":
+          description: Fee created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeeRecord"
+
+  /fees/{id}/pay:
+    post:
+      operationId: payFee
+      tags: [fees]
+      summary: Mark fee as paid
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeePayment"
+      responses:
+        "200":
+          description: Fee paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeeRecord"
+
+  /fees/defaulters:
+    get:
+      operationId: getFeeDefaulters
+      tags: [fees]
+      summary: Get fee defaulters list
+      responses:
+        "200":
+          description: Defaulters list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeeRecord"
+
+  /attendance:
+    get:
+      operationId: listAttendance
+      tags: [attendance]
+      summary: List attendance records
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: classId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: type
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [student, staff, null]
+      responses:
+        "200":
+          description: Attendance records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Attendance"
+    post:
+      operationId: markAttendance
+      tags: [attendance]
+      summary: Mark attendance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttendanceInput"
+      responses:
+        "201":
+          description: Attendance marked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attendance"
+
+  /exams:
+    get:
+      operationId: listExams
+      tags: [exams]
+      summary: List exams
+      responses:
+        "200":
+          description: List of exams
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Exam"
+    post:
+      operationId: createExam
+      tags: [exams]
+      summary: Create exam
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExamInput"
+      responses:
+        "201":
+          description: Exam created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Exam"
+
+  /exams/{id}/results:
+    get:
+      operationId: getExamResults
+      tags: [exams]
+      summary: Get exam results
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Exam results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ExamResult"
+    post:
+      operationId: saveExamResult
+      tags: [exams]
+      summary: Save exam result
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExamResultInput"
+      responses:
+        "201":
+          description: Result saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExamResult"
+
+  /staff:
+    get:
+      operationId: listStaff
+      tags: [staff]
+      summary: List staff members
+      responses:
+        "200":
+          description: Staff list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Staff"
+    post:
+      operationId: createStaff
+      tags: [staff]
+      summary: Create staff member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffInput"
+      responses:
+        "201":
+          description: Staff created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+
+  /staff/{id}:
+    patch:
+      operationId: updateStaff
+      tags: [staff]
+      summary: Update staff
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StaffUpdate"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Staff"
+
+  /salaries:
+    get:
+      operationId: listSalaries
+      tags: [staff]
+      summary: List salary records
+      parameters:
+        - name: staffId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: month
+          in: query
+          schema:
+            type: ["string", "null"]
+        - name: status
+          in: query
+          schema:
+            type: ["string", "null"]
+            enum: [paid, unpaid, null]
+      responses:
+        "200":
+          description: Salary records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Salary"
+    post:
+      operationId: createSalary
+      tags: [staff]
+      summary: Create salary record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalaryInput"
+      responses:
+        "201":
+          description: Salary record created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Salary"
+
+  /salaries/{id}/pay:
+    post:
+      operationId: paySalary
+      tags: [staff]
+      summary: Mark salary as paid
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Salary paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Salary"
+
+  /accounts/income:
+    get:
+      operationId: listIncome
+      tags: [accounts]
+      summary: List income records
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Income records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountEntry"
+    post:
+      operationId: createIncome
+      tags: [accounts]
+      summary: Create income record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountEntryInput"
+      responses:
+        "201":
+          description: Income created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountEntry"
+
+  /accounts/expenses:
+    get:
+      operationId: listExpenses
+      tags: [accounts]
+      summary: List expense records
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Expense records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AccountEntry"
+    post:
+      operationId: createExpense
+      tags: [accounts]
+      summary: Create expense record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountEntryInput"
+      responses:
+        "201":
+          description: Expense created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountEntry"
+
+  /accounts/summary:
+    get:
+      operationId: getAccountSummary
+      tags: [accounts]
+      summary: Get income/expense summary
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountSummary"
+
+  /certificates:
+    get:
+      operationId: listCertificates
+      tags: [certificates]
+      summary: List certificates
+      parameters:
+        - name: studentId
+          in: query
+          schema:
+            type: ["integer", "null"]
+        - name: type
+          in: query
+          schema:
+            type: ["string", "null"]
+      responses:
+        "200":
+          description: Certificates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Certificate"
+    post:
+      operationId: createCertificate
+      tags: [certificates]
+      summary: Generate certificate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CertificateInput"
+      responses:
+        "201":
+          description: Certificate generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Certificate"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +713,581 @@ components:
       required:
         - status
 
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        role:
+          type: string
+          enum: [admin, teacher, student]
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    User:
+      type: object
+      required: [id, username, role, name]
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, teacher, student]
+        name:
+          type: string
+        email:
+          type: ["string", "null"]
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+
+    DashboardStats:
+      type: object
+      required: [totalStudents, totalTeachers, monthlyIncome, monthlyExpenses, netProfit, pendingFees, defaulterCount, recentAdmissions]
+      properties:
+        totalStudents:
+          type: integer
+        totalTeachers:
+          type: integer
+        monthlyIncome:
+          type: number
+        monthlyExpenses:
+          type: number
+        netProfit:
+          type: number
+        pendingFees:
+          type: number
+        defaulterCount:
+          type: integer
+        recentAdmissions:
+          type: integer
+        activeStudents:
+          type: integer
+        totalClasses:
+          type: integer
+
+    Student:
+      type: object
+      required: [id, admissionNumber, name, classId, status, createdAt]
+      properties:
+        id:
+          type: integer
+        admissionNumber:
+          type: string
+        name:
+          type: string
+        fatherName:
+          type: ["string", "null"]
+        motherName:
+          type: ["string", "null"]
+        dateOfBirth:
+          type: ["string", "null"]
+        gender:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        emergencyContact:
+          type: ["string", "null"]
+        classId:
+          type: integer
+        className:
+          type: ["string", "null"]
+        section:
+          type: ["string", "null"]
+        rollNumber:
+          type: ["string", "null"]
+        feeAmount:
+          type: ["number", "null"]
+        status:
+          type: string
+          enum: [active, inactive, left]
+        imageUrl:
+          type: ["string", "null"]
+        username:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    StudentInput:
+      type: object
+      required: [name, classId]
+      properties:
+        name:
+          type: string
+        fatherName:
+          type: string
+        motherName:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+          enum: [male, female]
+        address:
+          type: string
+        phone:
+          type: string
+        emergencyContact:
+          type: string
+        classId:
+          type: integer
+        section:
+          type: string
+        rollNumber:
+          type: string
+        feeAmount:
+          type: number
+        status:
+          type: string
+          enum: [active, inactive, left]
+
+    StudentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        fatherName:
+          type: string
+        motherName:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        emergencyContact:
+          type: string
+        classId:
+          type: integer
+        section:
+          type: string
+        rollNumber:
+          type: string
+        feeAmount:
+          type: number
+        status:
+          type: string
+          enum: [active, inactive, left]
+
+    Class:
+      type: object
+      required: [id, name, grade]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        grade:
+          type: string
+        sections:
+          type: ["string", "null"]
+        teacherId:
+          type: ["integer", "null"]
+        teacherName:
+          type: ["string", "null"]
+        studentCount:
+          type: integer
+
+    ClassInput:
+      type: object
+      required: [name, grade]
+      properties:
+        name:
+          type: string
+        grade:
+          type: string
+        sections:
+          type: string
+        teacherId:
+          type: ["integer", "null"]
+
+    FeeRecord:
+      type: object
+      required: [id, studentId, amount, month, status, dueDate, createdAt]
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        studentName:
+          type: ["string", "null"]
+        admissionNumber:
+          type: ["string", "null"]
+        className:
+          type: ["string", "null"]
+        amount:
+          type: number
+        paidAmount:
+          type: number
+        remainingAmount:
+          type: number
+        month:
+          type: string
+        dueDate:
+          type: string
+        paidDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [paid, unpaid, partial]
+        fine:
+          type: number
+        createdAt:
+          type: string
+
+    FeeInput:
+      type: object
+      required: [studentId, amount, month, dueDate]
+      properties:
+        studentId:
+          type: integer
+        amount:
+          type: number
+        month:
+          type: string
+        dueDate:
+          type: string
+        fine:
+          type: number
+
+    FeePayment:
+      type: object
+      required: [paidAmount]
+      properties:
+        paidAmount:
+          type: number
+
+    Attendance:
+      type: object
+      required: [id, date, type, status, createdAt]
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: ["integer", "null"]
+        staffId:
+          type: ["integer", "null"]
+        personName:
+          type: ["string", "null"]
+        className:
+          type: ["string", "null"]
+        date:
+          type: string
+        type:
+          type: string
+          enum: [student, staff]
+        status:
+          type: string
+          enum: [present, absent, late, leave]
+        createdAt:
+          type: string
+
+    AttendanceInput:
+      type: object
+      required: [date, type, status]
+      properties:
+        studentId:
+          type: ["integer", "null"]
+        staffId:
+          type: ["integer", "null"]
+        date:
+          type: string
+        type:
+          type: string
+          enum: [student, staff]
+        status:
+          type: string
+          enum: [present, absent, late, leave]
+
+    Exam:
+      type: object
+      required: [id, name, classId, subject, examDate, totalMarks, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        classId:
+          type: integer
+        className:
+          type: ["string", "null"]
+        subject:
+          type: string
+        examDate:
+          type: string
+        totalMarks:
+          type: number
+        passingMarks:
+          type: number
+        createdAt:
+          type: string
+
+    ExamInput:
+      type: object
+      required: [name, classId, subject, examDate, totalMarks]
+      properties:
+        name:
+          type: string
+        classId:
+          type: integer
+        subject:
+          type: string
+        examDate:
+          type: string
+        totalMarks:
+          type: number
+        passingMarks:
+          type: number
+
+    ExamResult:
+      type: object
+      required: [id, examId, studentId, marksObtained, grade, createdAt]
+      properties:
+        id:
+          type: integer
+        examId:
+          type: integer
+        studentId:
+          type: integer
+        studentName:
+          type: ["string", "null"]
+        marksObtained:
+          type: number
+        grade:
+          type: string
+        position:
+          type: ["integer", "null"]
+        remarks:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    ExamResultInput:
+      type: object
+      required: [studentId, marksObtained]
+      properties:
+        studentId:
+          type: integer
+        marksObtained:
+          type: number
+        grade:
+          type: string
+        position:
+          type: ["integer", "null"]
+        remarks:
+          type: string
+
+    Staff:
+      type: object
+      required: [id, name, role, status, createdAt]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        role:
+          type: string
+          enum: [teacher, admin, accountant, support]
+        phone:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        address:
+          type: ["string", "null"]
+        subject:
+          type: ["string", "null"]
+        salary:
+          type: ["number", "null"]
+        joinDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [active, inactive]
+        username:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    StaffInput:
+      type: object
+      required: [name, role]
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+          enum: [teacher, admin, accountant, support]
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        subject:
+          type: string
+        salary:
+          type: number
+        joinDate:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive]
+
+    StaffUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        role:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        address:
+          type: string
+        subject:
+          type: string
+        salary:
+          type: number
+        status:
+          type: string
+          enum: [active, inactive]
+
+    Salary:
+      type: object
+      required: [id, staffId, amount, month, status, createdAt]
+      properties:
+        id:
+          type: integer
+        staffId:
+          type: integer
+        staffName:
+          type: ["string", "null"]
+        amount:
+          type: number
+        month:
+          type: string
+        paidDate:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [paid, unpaid]
+        createdAt:
+          type: string
+
+    SalaryInput:
+      type: object
+      required: [staffId, amount, month]
+      properties:
+        staffId:
+          type: integer
+        amount:
+          type: number
+        month:
+          type: string
+
+    AccountEntry:
+      type: object
+      required: [id, type, amount, category, date, description, createdAt]
+      properties:
+        id:
+          type: integer
+        type:
+          type: string
+          enum: [income, expense]
+        amount:
+          type: number
+        category:
+          type: string
+        description:
+          type: string
+        date:
+          type: string
+        createdAt:
+          type: string
+
+    AccountEntryInput:
+      type: object
+      required: [amount, category, description, date]
+      properties:
+        amount:
+          type: number
+        category:
+          type: string
+        description:
+          type: string
+        date:
+          type: string
+
+    AccountSummary:
+      type: object
+      required: [totalIncome, totalExpenses, netProfit]
+      properties:
+        totalIncome:
+          type: number
+        totalExpenses:
+          type: number
+        netProfit:
+          type: number
+        month:
+          type: ["string", "null"]
+
+    Certificate:
+      type: object
+      required: [id, studentId, type, issuedDate, createdAt]
+      properties:
+        id:
+          type: integer
+        studentId:
+          type: integer
+        studentName:
+          type: ["string", "null"]
+        type:
+          type: string
+          enum: [leaving, birth, bonafide, character, result, fee_clearance]
+        issuedDate:
+          type: string
+        certificateNumber:
+          type: string
+        remarks:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+
+    CertificateInput:
+      type: object
+      required: [studentId, type, issuedDate]
+      properties:
+        studentId:
+          type: integer
+        type:
+          type: string
+          enum: [leaving, birth, bonafide, character, result, fee_clearance]
+        issuedDate:
+          type: string
+        remarks:
+          type: string
