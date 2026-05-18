@@ -34,7 +34,7 @@ const getNavigation = (role?: string) => {
     { name: "Fee Voucher", href: "/fees/voucher", icon: ReceiptText, gradient: "from-teal-500 to-cyan-500", roles: ["admin"] },
     { name: "Fee Defaulters", href: "/fees/defaulters", icon: AlertTriangle, gradient: "from-red-500 to-rose-600", roles: ["admin"] },
     { name: "Arrears", href: "/arrears", icon: ClipboardList, gradient: "from-orange-500 to-amber-500", roles: ["admin"] },
-    { name: "Attendance", href: "/attendance", icon: CalendarCheck, gradient: "from-amber-400 to-orange-500", roles: ["admin", "teacher"] },
+    { name: "Attendance", href: "/attendance", icon: CalendarCheck, gradient: "from-amber-400 to-orange-500", roles: ["admin", "teacher", "student"] },
     { name: "Exams", href: "/exams", icon: FileText, gradient: "from-violet-500 to-fuchsia-500", roles: ["admin", "teacher", "student"] },
     { name: "Staff", href: "/staff", icon: Users2, gradient: "from-teal-400 to-emerald-500", roles: ["admin"] },
     { name: "Salaries", href: "/salaries", icon: Wallet, gradient: "from-cyan-500 to-blue-600", roles: ["admin"] },

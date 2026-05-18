@@ -12,7 +12,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Loader2, Printer } from "lucide-react";
+import { Plus, Loader2, Printer, CheckCircle, XCircle, Clock, AlertCircle } from "lucide-react";
+import { useAuthStore } from "@/lib/auth";
 
 const schema = z.object({
   type: z.enum(["student", "staff"]),
@@ -28,12 +29,122 @@ const statusColors = {
   leave: "bg-blue-100 text-blue-700 border-blue-200",
 };
 
+function StudentAttendance() {
+  const { data: attendance, isLoading } = useListAttendance({});
+
+  const allAtt  = attendance ?? [];
+  const present = allAtt.filter(a => a.status === "present").length;
+  const absent  = allAtt.filter(a => a.status === "absent").length;
+  const late    = allAtt.filter(a => a.status === "late").length;
+  const leave   = allAtt.filter(a => a.status === "leave").length;
+  const total   = allAtt.length;
+  const pct     = total > 0 ? Math.round((present / total) * 100) : 0;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">My Attendance</h1>
+        <p className="text-gray-500 text-sm mt-1">Your attendance record</p>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Present", value: present, icon: CheckCircle, gradient: "from-emerald-500 to-teal-500" },
+          { label: "Absent",  value: absent,  icon: XCircle,     gradient: "from-red-500 to-rose-600" },
+          { label: "Late",    value: late,    icon: Clock,        gradient: "from-amber-400 to-orange-500" },
+          { label: "Leave",   value: leave,   icon: AlertCircle, gradient: "from-blue-400 to-blue-600" },
+        ].map(card => (
+          <Card key={card.label} className="overflow-hidden border-0 shadow-sm">
+            <CardContent className="p-0">
+              <div className={`bg-gradient-to-br ${card.gradient} p-4`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white/80 text-xs font-medium uppercase tracking-wide">{card.label}</p>
+                    {isLoading
+                      ? <Skeleton className="h-6 w-12 mt-1 bg-white/30" />
+                      : <p className="text-white text-2xl font-bold mt-1">{card.value} days</p>
+                    }
+                  </div>
+                  <div className="bg-white/20 rounded-xl p-2">
+                    <card.icon className="w-6 h-6 text-white" />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Attendance % bar */}
+      {!isLoading && total > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Attendance Rate</span>
+              <span className={`text-sm font-bold ${pct >= 75 ? "text-emerald-600" : "text-red-600"}`}>{pct}%</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2.5">
+              <div
+                className={`h-2.5 rounded-full transition-all ${pct >= 75 ? "bg-emerald-500" : "bg-red-500"}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5">{present} present out of {total} total days</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Records table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base font-semibold">Attendance Records</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6 space-y-3">{[1,2,3,4,5].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : !allAtt.length ? (
+            <div className="py-12 text-center text-gray-400">No attendance records yet</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {["#", "Date", "Status"].map(h => (
+                      <th key={h} className="text-left py-3 px-4 font-semibold text-gray-600">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...allAtt].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? "")).map((att, i) => {
+                    const sc = statusColors[att.status as keyof typeof statusColors] || statusColors.present;
+                    return (
+                      <tr key={att.id} className="border-t hover:bg-gray-50">
+                        <td className="py-3 px-4 text-gray-400">{i + 1}</td>
+                        <td className="py-3 px-4 font-medium text-gray-800">{att.date}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border capitalize ${sc}`}>{att.status}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function Attendance() {
   const [open, setOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split("T")[0]);
   const [typeFilter, setTypeFilter] = useState<"student" | "staff">("student");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
 
   const { data: attendance, isLoading } = useListAttendance({ date: dateFilter, type: typeFilter });
   const { data: students } = useListStudents({});
@@ -65,6 +176,8 @@ export default function Attendance() {
       onError: () => toast({ variant: "destructive", title: "Failed to mark attendance" }),
     });
   };
+
+  if (user?.role === "student") return <StudentAttendance />;
 
   return (
     <div className="space-y-6">

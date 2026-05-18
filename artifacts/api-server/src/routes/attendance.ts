@@ -135,10 +135,13 @@ router.get("/", requireAuth, async (req, res) => {
     const conditions = [];
 
     if (reqUser.role === "student") {
-      // Use related_id directly — student ka apna attendance sirf
-      const studentId = reqUser.related_id ? Number(reqUser.related_id) : null;
-      if (!studentId) { res.json([]); return; }
-      conditions.push(eq(attendanceTable.studentId, studentId));
+      // Look up student by username from JWT (related_id is not in token)
+      const [student] = await db
+        .select({ id: studentsTable.id })
+        .from(studentsTable)
+        .where(eq(studentsTable.username, String(reqUser.username)));
+      if (!student) { res.json([]); return; }
+      conditions.push(eq(attendanceTable.studentId, student.id));
       conditions.push(eq(attendanceTable.type, "student"));
     } else {
       if (date) conditions.push(eq(attendanceTable.date, String(date)));
