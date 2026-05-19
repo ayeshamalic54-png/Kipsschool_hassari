@@ -731,7 +731,7 @@ export default function Salaries() {
               )} />
               {editTarget?.status === "paid" && (
                 <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-700">
-                  ⚠ Yeh salary already paid mark hai — sirf amount aur month edit hoga, status nahi badle ga
+                  ⚠ This salary is already marked as paid — only amount and month can be edited, status will not change
                 </div>
               )}
               <div className="flex justify-end gap-2">
@@ -750,7 +750,7 @@ export default function Salaries() {
         <DialogContent>
           <DialogHeader><DialogTitle>Salary Record Delete?</DialogTitle></DialogHeader>
           <p className="text-sm text-gray-600">
-            <strong>{deleteTarget?.staffName}</strong> — {deleteTarget?.month} ka salary record permanently delete ho jaye ga.
+            <strong>{deleteTarget?.staffName}</strong> — {deleteTarget?.month} salary record will be permanently deleted.
           </p>
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>

@@ -193,7 +193,7 @@ export default function FeeStructure() {
     saveFees(updated);
     toast({
       title: "Fees saved!",
-      description: `${editClassName} ki fee structure save ho gayi.`,
+      description: `Fee structure saved for ${editClassName}.`,
     });
     setEditOpen(false);
     setEditClassId(null);
@@ -224,7 +224,7 @@ export default function FeeStructure() {
           </div>
           <div>
             <h1 className="text-2xl font-bold" style={{ color: NAVY }}>Fee Structure</h1>
-            <p className="text-gray-500 text-sm">Har class ki fees yahan set karein</p>
+            <p className="text-gray-500 text-sm">Set fees for each class here</p>
           </div>
         </div>
         <Button variant="outline" onClick={() => window.print()} className="no-print">

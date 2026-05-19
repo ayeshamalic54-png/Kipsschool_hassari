@@ -192,7 +192,7 @@ export default function FeeVoucher() {
             <ReceiptText className="w-6 h-6 text-teal-600" /> Fee Voucher — By Class
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            Class select karein — fees database mein save hongi aur voucher print ho ga
+            Select a class — fees will be saved to the database and vouchers will be ready to print
           </p>
         </div>
       </div>
@@ -223,7 +223,7 @@ export default function FeeVoucher() {
           {/* Fee Type Checkboxes */}
           {selectedClass && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Voucher mein konsi fees shamil karein:</p>
+              <p className="text-sm font-medium text-gray-700 mb-2">Which fees to include in the voucher:</p>
               {hasFeeStructure ? (
                 <div className="flex flex-wrap gap-4">
                   {availableFeeTypes.map(ft => (
@@ -245,7 +245,7 @@ export default function FeeVoucher() {
                 </div>
               ) : (
                 <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-                  ⚠️ Is class ki fee structure set nahi — pehle <strong>Fee Structure</strong> page par fees set karein.
+                  ⚠️ No fee structure set for this class — please set fees on the <strong>Fee Structure</strong> page first.
                 </div>
               )}
             </div>
@@ -286,7 +286,7 @@ export default function FeeVoucher() {
           {generated && savedCount > 0 && (
             <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2">
               <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span><strong>{savedCount}</strong> students ki fees database mein save ho gayi.</span>
+              <span><strong>{savedCount}</strong> students' fees saved to database.</span>
             </div>
           )}
           {saveError && (

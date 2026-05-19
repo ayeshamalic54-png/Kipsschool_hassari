@@ -144,7 +144,7 @@ export default function Classes() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Classes</h1>
-          <p className="text-gray-500 text-sm mt-1">Class card par click karein students dekhne ke liye</p>
+          <p className="text-gray-500 text-sm mt-1">Click a class card to view its students</p>
         </div>
 
         {/* Create Dialog */}
@@ -210,7 +210,7 @@ export default function Classes() {
       ) : !classes?.length ? (
         <div className="text-center py-20 text-gray-400">
           <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="text-sm">Koi class nahi mili. Upar se add karein.</p>
+          <p className="text-sm">No classes found. Add one above.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -273,7 +273,7 @@ export default function Classes() {
                 )}
 
                 <div className="mt-3 flex items-center text-xs text-indigo-400 group-hover:text-indigo-600 transition-colors font-medium">
-                  <span>Students dekhein</span>
+                  <span>View Students</span>
                   <ChevronRight className="w-3.5 h-3.5 ml-1" />
                 </div>
               </CardContent>
@@ -330,8 +330,7 @@ export default function Classes() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
             <AlertDialogDescription>
-              Yeh class permanently delete ho jayegi. Agar is class mein students hain toh unhe pehle
-              dusri class mein transfer karein. Yeh action wapis nahi ho sakta.
+              This class will be permanently deleted. If this class has students, transfer them to another class first. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

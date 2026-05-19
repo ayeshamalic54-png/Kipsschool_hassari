@@ -311,25 +311,25 @@ function FeeStructureTab({ isAdmin }: { isAdmin: boolean }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Fee Structure</h2>
-          <p className="text-sm text-gray-500">Har class ki standard monthly fee — fee record banate waqt auto-fill hoti hai</p>
+          <p className="text-sm text-gray-500">Standard monthly fee per class — auto-fills when creating fee records</p>
         </div>
         {isAdmin && (
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
             <DialogTrigger asChild>
               <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white" disabled={availableClasses.length === 0}>
                 <Plus className="w-4 h-4 mr-2" />
-                {availableClasses.length === 0 ? "Sab classes set hain" : "Class Fee Set Karo"}
+                {availableClasses.length === 0 ? "All Classes Set" : "Set Class Fee"}
               </Button>
             </DialogTrigger>
             <DialogContent>
-              <DialogHeader><DialogTitle>Class Fee Structure Set Karo</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Set Class Fee Structure</DialogTitle></DialogHeader>
               <Form {...addForm}>
                 <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
                   <FormField control={addForm.control} name="classId" render={({ field }) => (
                     <FormItem>
                       <FormLabel>Class *</FormLabel>
                       <Select onValueChange={field.onChange}>
-                        <FormControl><SelectTrigger><SelectValue placeholder="Class select karo" /></SelectTrigger></FormControl>
+                        <FormControl><SelectTrigger><SelectValue placeholder="Select class" /></SelectTrigger></FormControl>
                         <SelectContent>
                           {availableClasses.map(c => (
                             <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
@@ -387,8 +387,8 @@ function FeeStructureTab({ isAdmin }: { isAdmin: boolean }) {
           ) : structures.length === 0 ? (
             <div className="py-16 text-center text-gray-400">
               <BookOpen className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-              <p className="font-medium">Koi fee structure set nahi hai</p>
-              {isAdmin && <p className="text-sm mt-1">Upar "Class Fee Set Karo" button se start karo</p>}
+              <p className="font-medium">No fee structure set</p>
+              {isAdmin && <p className="text-sm mt-1">Use the "Set Class Fee" button above to get started</p>}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -497,8 +497,8 @@ function FeeStructureTab({ isAdmin }: { isAdmin: boolean }) {
         <DialogContent>
           <DialogHeader><DialogTitle>Fee Structure Delete?</DialogTitle></DialogHeader>
           <p className="text-sm text-gray-600">
-            <strong>{deleteTarget?.className}</strong> ki fee structure delete ho jaye gi.
-            Existing fee records par koi asar nahi hoga.
+            Fee structure for <strong>{deleteTarget?.className}</strong> will be deleted.
+            Existing fee records will not be affected.
           </p>
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
@@ -750,7 +750,7 @@ export default function Fees() {
                   <DialogHeader>
                     <DialogTitle>New Fee Record</DialogTitle>
                     {feeStructures.length > 0 && (
-                      <p className="text-xs text-emerald-600 mt-1">✓ Student select karne par amount auto-fill hoga</p>
+                      <p className="text-xs text-emerald-600 mt-1">✓ Amount will auto-fill when a student is selected</p>
                     )}
                   </DialogHeader>
                   <Form {...addForm}>
@@ -759,7 +759,7 @@ export default function Fees() {
                         <FormItem>
                           <FormLabel>Student *</FormLabel>
                           <Select onValueChange={val => handleStudentChange(val, field.onChange)}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Student select karo" /></SelectTrigger></FormControl>
+                            <FormControl><SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger></FormControl>
                             <SelectContent>
                               {students?.map(s => (
                                 <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.admissionNumber})</SelectItem>
@@ -775,7 +775,7 @@ export default function Fees() {
                         <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 text-xs text-blue-700">
                           Class: <strong>{classes?.find(c => c.id === Number(selectedClassId))?.name ?? selectedClassId}</strong>
                           {feeStructures.find(s => s.classId === Number(selectedClassId)) && (
-                            <span className="ml-2">— Fee structure se auto-fill ho gaya ✓</span>
+                            <span className="ml-2">— Auto-filled from fee structure ✓</span>
                           )}
                         </div>
                       )}
@@ -917,7 +917,7 @@ export default function Fees() {
                   value={payAmount}
                   onChange={e => setPayAmount(e.target.value)}
                   className="mt-1"
-                  placeholder="Amount enter karo"
+                  placeholder="Enter amount"
                   max={currentFee.remainingAmount ?? currentFee.amount}
                 />
               </div>
@@ -971,7 +971,7 @@ export default function Fees() {
         <DialogContent>
           <DialogHeader><DialogTitle>Fee Record Delete?</DialogTitle></DialogHeader>
           <p className="text-sm text-gray-600">
-            <strong>{deleteTarget?.studentName}</strong> — {deleteTarget?.month} ka fee record permanently delete ho jaye ga.
+            <strong>{deleteTarget?.studentName}</strong> — {deleteTarget?.month} fee record will be permanently deleted.
           </p>
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>

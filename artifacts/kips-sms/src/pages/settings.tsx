@@ -154,8 +154,8 @@ export default function Settings() {
     const salaries = d?.salaries?.length ?? 0;
     const accounts = d?.accountEntries?.length ?? 0;
     const warning = students === 0
-      ? `⚠️ KHABARDAR: Is backup mein koi student nahi hai (0 students)!\n\nAgar restore karo ge toh saare students delete ho jayein ge!\n\nBackup ka waqt: ${timestamp}\n\nKya aap PAKKA restore karna chahte hain?`
-      : `Backup contents:\n• Students: ${students}\n• Fees: ${fees}\n• Attendance: ${attendance}\n• Salaries: ${salaries}\n• Accounts: ${accounts}\n\nBackup time: ${timestamp}\n\nYeh saara current data replace kar dega. Restore karna hai?`;
+      ? `⚠️ WARNING: This backup has no students (0 students)!\n\nRestoring will delete ALL current students!\n\nBackup time: ${timestamp}\n\nAre you SURE you want to restore?`
+      : `Backup contents:\n• Students: ${students}\n• Fees: ${fees}\n• Attendance: ${attendance}\n• Salaries: ${salaries}\n• Accounts: ${accounts}\n\nBackup time: ${timestamp}\n\nThis will replace all current data. Proceed with restore?`;
     return confirm(warning);
   };
 
@@ -179,7 +179,7 @@ export default function Settings() {
         e.target.value = ""; return;
       }
     } catch {
-      toast({ variant: "destructive", title: "Invalid backup file", description: "File parse nahi ho saki" });
+      toast({ variant: "destructive", title: "Invalid backup file", description: "Could not parse backup file" });
       e.target.value = ""; return;
     }
     setRestoring(true);
@@ -236,12 +236,12 @@ export default function Settings() {
               Active
             </span>
           </div>
-          <p className="text-white/70 text-xs mt-1">Har roz midnight (12 baje raat) Pakistan time automatically backup hota hai</p>
+          <p className="text-white/70 text-xs mt-1">Automatically backs up every day at midnight (12:00 AM) Pakistan time</p>
         </div>
         <CardContent className="p-5 space-y-4">
           {loadingAutoStatus ? (
             <div className="flex items-center gap-2 text-gray-400 text-sm">
-              <RefreshCw className="w-4 h-4 animate-spin" /> Status load ho raha hai...
+              <RefreshCw className="w-4 h-4 animate-spin" /> Loading status...
             </div>
           ) : autoStatus ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -257,7 +257,7 @@ export default function Settings() {
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">Kabhi nahi chala</p>
+                  <p className="text-sm text-gray-400">Never run</p>
                 )}
               </div>
               <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
@@ -282,7 +282,7 @@ export default function Settings() {
               <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                 <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Database className="w-3 h-3" /> Saved Backups</p>
                 <p className="text-sm font-semibold text-gray-800">{autoStatus.autoBackupCount} files</p>
-                <p className="text-xs text-gray-400">Max 7 rakhe jate hain</p>
+                <p className="text-xs text-gray-400">Max 7 kept</p>
               </div>
             </div>
           ) : null}
@@ -306,8 +306,8 @@ export default function Settings() {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-start gap-2">
             <Zap className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
             <p className="text-xs text-blue-700">
-              <strong>Agle 7 din ke backups</strong> automatically save hote hain. 7 se zyada hone par purana backup delete ho jata hai.
-              Backup file naam: <code className="bg-blue-100 px-1 rounded">auto-backup-YYYY-MM-DD...</code>
+              <strong>Last 7 days of backups</strong> are automatically saved. Older backups are deleted when the limit is reached.
+              Backup filename: <code className="bg-blue-100 px-1 rounded">auto-backup-YYYY-MM-DD...</code>
             </p>
           </div>
         </CardContent>
@@ -348,7 +348,7 @@ export default function Settings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-            <strong>Warning:</strong> Restoring will replace all current student, fee, attendance, exam, and financial data with the backup. Staff records are preserved. A pre-restore backup is saved automatically. Restore se pehle backup ka data count dikhaya jayega.
+            <strong>Warning:</strong> Restoring will replace all current student, fee, attendance, exam, and financial data with the backup. Staff records are preserved. A pre-restore backup is saved automatically. The backup data count will be shown before restoring.
           </div>
           <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />
           <Button

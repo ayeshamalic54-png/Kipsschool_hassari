@@ -7,11 +7,10 @@ import {
 } from "lucide-react";
 
 // ─── ALL REPORT NAVIGATION CARDS ──────────────────────────────────────────────
-// Financial Report ab ek card ki tarah baaki cards ke saath show hoga
 const reportCards = [
   {
     title: "Financial Report",
-    description: "Income, expenses aur net profit",
+    description: "Income, expenses and net profit",
     icon: TrendingUp,
     color: "from-indigo-500 to-blue-600",
     href: "/accounts",
@@ -94,7 +93,7 @@ export default function Reports() {
           Reports
         </h1>
         <p className="text-gray-500 text-sm mt-1">
-          Kisi bhi report ko dekhne ke liye card par click karein
+          Click on any report card to view it
         </p>
       </div>
 

@@ -87,7 +87,7 @@ function FeeReminderBanner({ students }: {
           </CardTitle>
           <div className="flex gap-2">
             <Button size="sm"
-              onClick={() => toast({ title: "Fee Reminders Ready", description: `${studentsWithFee.length} students ki fees pending hain.` })}
+              onClick={() => toast({ title: "Fee Reminders Ready", description: `${studentsWithFee.length} students have pending fees.` })}
               className="h-7 text-xs bg-orange-600 hover:bg-orange-700 text-white">
               <Bell className="w-3 h-3 mr-1" /> Remind All
             </Button>
@@ -95,7 +95,7 @@ function FeeReminderBanner({ students }: {
           </div>
         </div>
         <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
-          <AlertTriangle className="w-3 h-3" /> {studentsWithFee.length} students ki monthly fees hain
+          <AlertTriangle className="w-3 h-3" /> {studentsWithFee.length} students have monthly fees pending
         </p>
       </CardHeader>
       <CardContent className="pt-0">

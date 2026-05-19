@@ -413,8 +413,7 @@ export default function Staff() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete "{deleteTarget?.name}"?</AlertDialogTitle>
             <AlertDialogDescription>
-              Yeh staff member permanently delete ho jayega. Unki salary records aur attendance
-              bhi affect ho sakti hai. Yeh action wapis nahi ho sakta.
+              This staff member will be permanently deleted. Their salary records and attendance may also be affected. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

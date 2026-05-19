@@ -181,7 +181,7 @@ function BulkResultEntry({ exam, students, onSaved }: {
   const handleSave = async () => {
     const toSave = entries.filter(e => e.marks.trim() !== "" && !isNaN(Number(e.marks)));
     if (!toSave.length) {
-      toast({ variant: "destructive", title: "Kisi ka bhi marks enter nahi kiya" });
+      toast({ variant: "destructive", title: "No marks have been entered for anyone" });
       return;
     }
     setSaving(true);
@@ -199,10 +199,10 @@ function BulkResultEntry({ exam, students, onSaved }: {
       });
       if (!res.ok) throw new Error("Failed");
       const data = await res.json() as { saved: number };
-      toast({ title: `✓ ${data.saved} students ke results save ho gaye` });
+      toast({ title: `✓ ${data.saved} students' results saved successfully` });
       onSaved();
     } catch {
-      toast({ variant: "destructive", title: "Bulk results save karne mein masla hua" });
+      toast({ variant: "destructive", title: "Failed to save bulk results" });
     } finally {
       setSaving(false);
     }
@@ -214,7 +214,7 @@ function BulkResultEntry({ exam, students, onSaved }: {
     return (
       <div className="py-10 text-center text-gray-400">
         <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-30" />
-        <p className="text-sm">Is class mein koi student nahi mila</p>
+        <p className="text-sm">No students found in this class</p>
       </div>
     );
   }
