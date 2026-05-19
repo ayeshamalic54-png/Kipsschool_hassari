@@ -83,6 +83,7 @@ const addFeeSchema = z.object({
   month:     z.string().min(1, "Month required"),
   dueDate:   z.string().min(1, "Due date required"),
   fine:      z.string().optional(),
+  discount:  z.string().optional(),
 });
 
 const editFeeSchema = z.object({
@@ -627,7 +628,7 @@ export default function Fees() {
   // ── Add Fee form ──────────────────────────────────────────────────────────
   const addForm = useForm<z.infer<typeof addFeeSchema>>({
     resolver: zodResolver(addFeeSchema),
-    defaultValues: { fine: "0" },
+    defaultValues: { fine: "0", discount: "0" },
   });
 
   const onAddSubmit = (values: z.infer<typeof addFeeSchema>) => {
@@ -638,13 +639,14 @@ export default function Fees() {
         month:     values.month,
         dueDate:   values.dueDate,
         fine:      Number(values.fine ?? 0),
-      }
+        discount:  Number(values.discount ?? 0),
+      } as never
     }, {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListFeesQueryKey() });
         toast({ title: "Fee record created" });
         setAddOpen(false);
-        addForm.reset({ fine: "0" });
+        addForm.reset({ fine: "0", discount: "0" });
         setSelectedClassId("");
       },
       onError: () => toast({ variant: "destructive", title: "Failed to create fee record" }),
@@ -847,7 +849,7 @@ export default function Fees() {
               ))}
             </div>
             {!isStudent && (
-              <Dialog open={addOpen} onOpenChange={o => { setAddOpen(o); if (!o) { addForm.reset({ fine: "0" }); setSelectedClassId(""); setStudentSearch(""); } }}>
+              <Dialog open={addOpen} onOpenChange={o => { setAddOpen(o); if (!o) { addForm.reset({ fine: "0", discount: "0" }); setSelectedClassId(""); setStudentSearch(""); } }}>
                 <DialogTrigger asChild>
                   <Button className="bg-gradient-to-r from-emerald-600 to-green-600 text-white">
                     <Plus className="w-4 h-4 mr-2" /> Add Fee Record
@@ -967,6 +969,11 @@ export default function Fees() {
                           ✓ Amount auto-filled from <strong>{classes?.find(c => c.id === Number(selectedClassId))?.name}</strong> fee structure
                         </div>
                       )}
+                      {selectedClassId && !feeStructures.find(s => s.classId === Number(selectedClassId)) && (
+                        <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 text-xs text-amber-800">
+                          ⚠ No fee structure set for <strong>{classes?.find(c => c.id === Number(selectedClassId))?.name}</strong>. Add one in the <strong>Fee Structure</strong> page so the amount auto-fills next time. You can still type the amount below manually.
+                        </div>
+                      )}
 
                       <FormField control={addForm.control} name="amount" render={({ field }) => (
                         <FormItem>
@@ -981,9 +988,14 @@ export default function Fees() {
                       <FormField control={addForm.control} name="dueDate" render={({ field }) => (
                         <FormItem><FormLabel>Due Date *</FormLabel><FormControl><Input type="date" {...field} /></FormControl><FormMessage /></FormItem>
                       )} />
-                      <FormField control={addForm.control} name="fine" render={({ field }) => (
-                        <FormItem><FormLabel>Fine (PKR)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl></FormItem>
-                      )} />
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField control={addForm.control} name="fine" render={({ field }) => (
+                          <FormItem><FormLabel>Fine (PKR)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl></FormItem>
+                        )} />
+                        <FormField control={addForm.control} name="discount" render={({ field }) => (
+                          <FormItem><FormLabel>Discount (PKR)</FormLabel><FormControl><Input type="number" placeholder="0" {...field} /></FormControl></FormItem>
+                        )} />
+                      </div>
                       <div className="flex justify-end gap-2">
                         <Button type="button" variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
                         <Button type="submit" disabled={createMutation.isPending}>
