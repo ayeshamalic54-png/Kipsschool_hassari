@@ -344,44 +344,29 @@
                               />
                             </div>
 
-                            ```tsx
-{bulkType === "student" && (
-  <div>
-    <label className="text-xs font-medium text-gray-600 block mb-1">
-      Class (optional)
-    </label>
-
-    <Select
-      value={classId || "all"}
-      onValueChange={(v) => {
-        setClassId(v === "all" ? "" : v);
-        setLoaded(false);
-        setRows([]);
-      }}
-    >
-      <SelectTrigger className="h-9">
-        <SelectValue placeholder="All classes" />
-      </SelectTrigger>
-
-      <SelectContent>
-        <SelectItem value="all">
-          All classes
-        </SelectItem>
-
-        {classes?.map((c) => (
-          <SelectItem
-            key={c.id}
-            value={String(c.id)}
-          >
-            {c.name}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
-)}
-```
-
+                            {bulkType === "student" && (
+                              <div>
+                                <label className="text-xs font-medium text-gray-600 block mb-1">Class (optional)</label>
+                                <Select
+                                  value={classId || "all"}
+                                  onValueChange={(v) => {
+                                    setClassId(v === "all" ? "" : v);
+                                    setLoaded(false);
+                                    setRows([]);
+                                  }}
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="All classes" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="all">All classes</SelectItem>
+                                    {classes?.map((c) => (
+                                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
 
                             <div className="flex items-end">
                               <Button onClick={loadPeople} className="h-9 w-full bg-amber-500 hover:bg-amber-600 text-white">

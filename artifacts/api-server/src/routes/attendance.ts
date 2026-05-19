@@ -170,6 +170,61 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/attendance/bulk
+// Saves attendance for many people at once. For each record, if an attendance
+// row already exists for the same (date, studentId|staffId, type), update its
+// status; otherwise insert a new row.
+router.post("/bulk", requireAuth, async (req, res) => {
+  try {
+    const reqUser = (req as AuthReq).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const records = Array.isArray(req.body?.records) ? req.body.records : [];
+    if (records.length === 0) { res.json({ saved: 0 }); return; }
+
+    let saved = 0;
+    for (const r of records) {
+      const date   = String(r.date ?? "");
+      const type   = r.type === "staff" ? "staff" : "student";
+      const status = ["present", "absent", "late", "leave"].includes(r.status) ? r.status : "present";
+      const studentId = type === "student" && r.studentId != null ? Number(r.studentId) : null;
+      const staffId   = type === "staff"   && r.staffId   != null ? Number(r.staffId)   : null;
+      if (!date || (studentId === null && staffId === null)) continue;
+
+      const conditions = [
+        eq(attendanceTable.date, date),
+        eq(attendanceTable.type, type as "student" | "staff"),
+      ];
+      if (studentId !== null) conditions.push(eq(attendanceTable.studentId, studentId));
+      if (staffId   !== null) conditions.push(eq(attendanceTable.staffId,   staffId));
+
+      const [existing] = await db
+        .select({ id: attendanceTable.id })
+        .from(attendanceTable)
+        .where(and(...conditions));
+
+      if (existing) {
+        await db.update(attendanceTable)
+          .set({ status })
+          .where(eq(attendanceTable.id, existing.id));
+      } else {
+        await db.insert(attendanceTable).values({
+          date,
+          type: type as "student" | "staff",
+          status,
+          studentId,
+          staffId,
+        });
+      }
+      saved++;
+    }
+    res.json({ saved });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // POST /api/attendance
 router.post("/", requireAuth, async (req, res) => {
   try {
