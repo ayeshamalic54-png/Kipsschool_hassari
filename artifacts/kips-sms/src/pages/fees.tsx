@@ -747,79 +747,84 @@ export default function Fees() {
     });
   };
 
-  // Generate the receipt as a downloadable PDF file (no popup blocker, no print
-  // dialog — the file downloads directly).
+  // Generate the receipt as a PDF and open it in a new tab so the user can
+  // save or print it from the native PDF viewer.
   const handleDownloadReceiptPdf = async () => {
     if (!receipt) return;
     const logoSrc = `${window.location.origin}/kips-logo.jpeg`;
-    // Render receipt HTML inside a hidden iframe in the current page so we
-    // bypass popup blockers and have full control over the rendering surface.
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.left = "-10000px";
-    iframe.style.top = "0";
-    iframe.style.width = "210mm";
-    iframe.style.height = "297mm";
-    iframe.style.border = "0";
-    document.body.appendChild(iframe);
-    const idoc = iframe.contentDocument;
-    if (!idoc) { document.body.removeChild(iframe); return; }
-    idoc.open();
-    idoc.write(buildReceiptHtml(receipt, logoSrc));
-    idoc.close();
+
+    // Render the receipt content directly into the current document. This
+    // avoids the iframe/cross-document quirks that left the page blank.
+    const html = buildReceiptHtml(receipt, logoSrc);
+    const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/);
+    const bodyMatch  = html.match(/<body>([\s\S]*?)<\/body>/);
+    const styleText  = styleMatch ? styleMatch[1] : "";
+    const bodyHtml   = bodyMatch  ? bodyMatch[1]  : html;
+
+    const host = document.createElement("div");
+    host.id = "kips-receipt-render";
+    // Keep it visually off-screen but fully rendered (do NOT use display:none
+    // or visibility:hidden — html2canvas needs a real layout).
+    host.style.cssText = "position:fixed;left:0;top:0;width:210mm;background:#fff;z-index:-1;opacity:0;pointer-events:none;";
+    host.innerHTML = `<style>${styleText}</style>${bodyHtml}`;
+    // Remove the floating "Print / Save as PDF" button injected by buildReceiptHtml
+    host.querySelectorAll(".no-print").forEach(n => n.remove());
+    document.body.appendChild(host);
 
     try {
-      // Wait for the embedded logo image to load before rasterising
-      await new Promise<void>(resolve => {
-        const img = idoc.querySelector("img.logo") as HTMLImageElement | null;
-        if (!img) return resolve();
-        if (img.complete) return resolve();
+      // Wait for both logos to finish loading
+      const imgs = Array.from(host.querySelectorAll("img")) as HTMLImageElement[];
+      await Promise.all(imgs.map(img => new Promise<void>(resolve => {
+        if (img.complete && img.naturalWidth > 0) return resolve();
         img.onload  = () => resolve();
         img.onerror = () => resolve();
-        setTimeout(resolve, 1500);
-      });
+        setTimeout(resolve, 2000);
+      })));
 
       const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
         import("html2canvas"),
         import("jspdf"),
       ]);
-      const target = idoc.querySelector(".page") as HTMLElement | null;
-      if (!target) throw new Error("Receipt body not found");
+      const target = host.querySelector(".page") as HTMLElement | null;
+      if (!target) throw new Error("Receipt page element not found");
+
       const canvas = await html2canvas(target, {
         scale: 2,
         backgroundColor: "#ffffff",
         useCORS: true,
+        allowTaint: true,
         logging: false,
+        windowWidth: target.scrollWidth,
+        windowHeight: target.scrollHeight,
       });
+
       const imgData = canvas.toDataURL("image/jpeg", 0.95);
       const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
       const pdfW = pdf.internal.pageSize.getWidth();
       const pdfH = pdf.internal.pageSize.getHeight();
-      const margin = 10;
+      const margin = 8;
       const usableW = pdfW - margin * 2;
+      const usableH = pdfH - margin * 2;
       const ratio = canvas.height / canvas.width;
       let imgW = usableW;
       let imgH = imgW * ratio;
-      if (imgH > pdfH - margin * 2) {
-        imgH = pdfH - margin * 2;
+      if (imgH > usableH) {
+        imgH = usableH;
         imgW = imgH / ratio;
       }
       pdf.addImage(imgData, "JPEG", (pdfW - imgW) / 2, margin, imgW, imgH);
-      // Open the PDF in a new browser tab. The native PDF viewer already
-      // exposes Save and Print buttons, so a single click gives the user
-      // everything they need.
+
       const blobUrl = pdf.output("bloburl");
       const win = window.open(blobUrl as unknown as string, "_blank");
       if (!win) {
-        // Popup blocked — fall back to direct download
         const fileName = `receipt_${receipt.studentName.replace(/\s+/g, "_")}_${receipt.month.replace(/\s+/g, "_")}.pdf`;
         pdf.save(fileName);
       }
     } catch (err) {
       console.error("PDF generation failed", err);
-      toast({ variant: "destructive", title: "PDF download failed", description: "Please try again." });
+      toast({ variant: "destructive", title: "PDF generation failed", description: "Please try again." });
     } finally {
-      document.body.removeChild(iframe);
+      host.remove();
     }
   };
 
