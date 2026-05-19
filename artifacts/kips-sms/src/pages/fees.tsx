@@ -747,11 +747,84 @@ export default function Fees() {
     });
   };
 
+  // Generate the receipt as a downloadable PDF file (no popup blocker, no print
+  // dialog — the file downloads directly).
+  const handleDownloadReceiptPdf = async () => {
+    if (!receipt) return;
+    const logoSrc = `${window.location.origin}/kips-logo.jpeg`;
+    // Render receipt HTML inside a hidden iframe in the current page so we
+    // bypass popup blockers and have full control over the rendering surface.
+    const iframe = document.createElement("iframe");
+    iframe.style.position = "fixed";
+    iframe.style.left = "-10000px";
+    iframe.style.top = "0";
+    iframe.style.width = "210mm";
+    iframe.style.height = "297mm";
+    iframe.style.border = "0";
+    document.body.appendChild(iframe);
+    const idoc = iframe.contentDocument;
+    if (!idoc) { document.body.removeChild(iframe); return; }
+    idoc.open();
+    idoc.write(buildReceiptHtml(receipt, logoSrc));
+    idoc.close();
+
+    try {
+      // Wait for the embedded logo image to load before rasterising
+      await new Promise<void>(resolve => {
+        const img = idoc.querySelector("img.logo") as HTMLImageElement | null;
+        if (!img) return resolve();
+        if (img.complete) return resolve();
+        img.onload  = () => resolve();
+        img.onerror = () => resolve();
+        setTimeout(resolve, 1500);
+      });
+
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const target = idoc.querySelector(".page") as HTMLElement | null;
+      if (!target) throw new Error("Receipt body not found");
+      const canvas = await html2canvas(target, {
+        scale: 2,
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        logging: false,
+      });
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+      const pdf = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = pdf.internal.pageSize.getHeight();
+      const margin = 10;
+      const usableW = pdfW - margin * 2;
+      const ratio = canvas.height / canvas.width;
+      let imgW = usableW;
+      let imgH = imgW * ratio;
+      if (imgH > pdfH - margin * 2) {
+        imgH = pdfH - margin * 2;
+        imgW = imgH / ratio;
+      }
+      pdf.addImage(imgData, "JPEG", (pdfW - imgW) / 2, margin, imgW, imgH);
+      const fileName = `receipt_${receipt.studentName.replace(/\s+/g, "_")}_${receipt.month.replace(/\s+/g, "_")}.pdf`;
+      pdf.save(fileName);
+    } catch (err) {
+      console.error("PDF generation failed", err);
+      toast({ variant: "destructive", title: "PDF download failed", description: "Please try again." });
+    } finally {
+      document.body.removeChild(iframe);
+    }
+  };
+
+  // Open the receipt in a new tab so the user can also print it via the
+  // browser's native print dialog (Save as PDF is also available there).
   const handlePrintReceipt = () => {
     if (!receipt) return;
     const logoSrc = `${window.location.origin}/kips-logo.jpeg`;
     const w = window.open("", "_blank", "width=500,height=700");
-    if (!w) return;
+    if (!w) {
+      toast({ variant: "destructive", title: "Popup blocked", description: "Use Download PDF instead." });
+      return;
+    }
     w.document.write(buildReceiptHtml(receipt, logoSrc));
     w.document.close();
   };
@@ -1297,10 +1370,13 @@ export default function Fees() {
                   : <div className="flex justify-between"><span className="text-gray-500">Status:</span><span className="text-emerald-600 font-bold">✓ Fully Paid</span></div>
                 }
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 flex-wrap">
                 <Button variant="outline" onClick={() => setReceipt(null)}>Close</Button>
-                <Button onClick={handlePrintReceipt} className="bg-blue-600 hover:bg-blue-700 text-white">
-                  <Printer className="w-4 h-4 mr-2" /> Receipt Print Karo
+                <Button onClick={handlePrintReceipt} variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
+                  <Printer className="w-4 h-4 mr-2" /> Print
+                </Button>
+                <Button onClick={handleDownloadReceiptPdf} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                  <Printer className="w-4 h-4 mr-2" /> Download PDF
                 </Button>
               </div>
             </div>

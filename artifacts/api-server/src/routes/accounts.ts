@@ -1,49 +1,21 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { accountEntriesTable, feesTable, studentsTable } from "@workspace/db";
-import { eq, and, like, sql, isNotNull } from "drizzle-orm";
+import { accountEntriesTable } from "@workspace/db";
+import { eq, and, like, sql } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 
 const router = Router();
 
-// Helper: load paid fees as virtual income entries
-async function loadFeeIncome(month?: string) {
-  const rows = await db
-    .select({
-      id:        feesTable.id,
-      amount:    feesTable.paidAmount,
-      date:      feesTable.paidDate,
-      studentId: feesTable.studentId,
-      feeMonth:  feesTable.month,
-      studentName: studentsTable.name,
-    })
-    .from(feesTable)
-    .leftJoin(studentsTable, eq(feesTable.studentId, studentsTable.id))
-    .where(isNotNull(feesTable.paidDate));
-  return rows
-    .filter(r => r.date && (!month || r.date.startsWith(month)))
-    .map(r => ({
-      id: -r.id, // negative id to avoid clashing with accountEntries ids
-      type: "income" as const,
-      category: "Fee Income",
-      description: `Fee payment — ${r.studentName ?? "Student"} (${r.feeMonth})`,
-      amount: Number(r.amount ?? 0),
-      date: r.date as string,
-      source: "fee" as const,
-    }));
-}
-
 // GET /api/accounts/income
+// Returns ONLY manual income entries. Fee income is computed separately on the
+// frontend from the fees list (so it does not get double-counted here).
 router.get("/income", requireAuth, async (req, res) => {
   try {
     const { month } = req.query;
     const conditions = [eq(accountEntriesTable.type, "income")];
     if (month) conditions.push(like(accountEntriesTable.date, `${month}%`));
     const entries = await db.select().from(accountEntriesTable).where(and(...conditions));
-    const manual = entries.map(e => ({ ...e, amount: Number(e.amount), source: "manual" as const }));
-    const feeIncome = await loadFeeIncome(month ? String(month) : undefined);
-    const merged = [...manual, ...feeIncome].sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
-    res.json(merged);
+    res.json(entries.map(e => ({ ...e, amount: Number(e.amount) })));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -129,11 +101,7 @@ router.get("/summary", requireAuth, async (req, res) => {
     const [income] = await db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(accountEntriesTable).where(and(...incomeConditions));
     const [expense] = await db.select({ total: sql<number>`coalesce(sum(amount), 0)` }).from(accountEntriesTable).where(and(...expenseConditions));
 
-    // Include paid fees as income too
-    const feeRows = await loadFeeIncome(month ? String(month) : undefined);
-    const feeTotal = feeRows.reduce((s, r) => s + r.amount, 0);
-
-    const totalIncome = Number(income?.total ?? 0) + feeTotal;
+    const totalIncome = Number(income?.total ?? 0);
     const totalExpenses = Number(expense?.total ?? 0);
     res.json({ totalIncome, totalExpenses, netProfit: totalIncome - totalExpenses, month: month ?? null });
   } catch (err) {
