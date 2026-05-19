@@ -165,9 +165,20 @@ export default function Students() {
     ...(classIdFilter ? { classId: Number(classIdFilter) } : {}),
   };
 
-  const { data: students, isLoading } = useListStudents(queryParams);
-  const { data: allStudents }          = useListStudents({ status: "active" });
-  const { data: classes }              = useListClasses();
+  const { data: studentsRaw, isLoading } = useListStudents(queryParams);
+  const { data: allStudents }            = useListStudents({ status: "active" });
+  const { data: classes }                = useListClasses();
+
+  // Sort: class name → admission number → student name
+  const students = studentsRaw ? [...studentsRaw].sort((a, b) => {
+    const ca = (a.className ?? "").toLowerCase();
+    const cb = (b.className ?? "").toLowerCase();
+    if (ca !== cb) return ca.localeCompare(cb, undefined, { numeric: true });
+    const aa = (a.admissionNumber ?? "").toString();
+    const ab = (b.admissionNumber ?? "").toString();
+    if (aa !== ab) return aa.localeCompare(ab, undefined, { numeric: true });
+    return (a.name ?? "").localeCompare(b.name ?? "");
+  }) : studentsRaw;
   const updateMutation                 = useUpdateStudent();
   const deleteMutation                 = useDeleteStudent();
 

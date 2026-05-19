@@ -910,28 +910,73 @@ export default function Fees() {
                   </DialogHeader>
                   <Form {...addForm}>
                     <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
-                      <FormField control={addForm.control} name="studentId" render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Student *</FormLabel>
-                          <Select onValueChange={val => handleStudentChange(val, field.onChange)}>
-                            <FormControl><SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger></FormControl>
-                            <SelectContent>
-                              {students?.map(s => (
-                                <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.admissionNumber})</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormMessage />
-                        </FormItem>
-                      )} />
+                      {/* Step 1: Class selector */}
+                      <FormItem>
+                        <FormLabel>Class * <span className="text-xs text-gray-500 font-normal">(select first)</span></FormLabel>
+                        <Select
+                          value={selectedClassId}
+                          onValueChange={cid => {
+                            setSelectedClassId(cid);
+                            // Reset student & auto-fill fee from structure for this class
+                            addForm.setValue("studentId", "");
+                            const structure = feeStructures.find(s => s.classId === Number(cid));
+                            if (structure) {
+                              addForm.setValue("amount", String(structure.monthlyFee));
+                              addForm.setValue("fine",   String(structure.lateFine ?? 0));
+                            }
+                          }}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Select class first" /></SelectTrigger>
+                          <SelectContent className="max-h-72 overflow-y-auto">
+                            {classes?.map(c => (
+                              <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
 
-                      {/* Class info display (read-only, auto from student) */}
-                      {selectedClassId && (
-                        <div className="bg-blue-50 border border-blue-200 rounded px-3 py-2 text-xs text-blue-700">
-                          Class: <strong>{classes?.find(c => c.id === Number(selectedClassId))?.name ?? selectedClassId}</strong>
-                          {feeStructures.find(s => s.classId === Number(selectedClassId)) && (
-                            <span className="ml-2">— Auto-filled from fee structure ✓</span>
-                          )}
+                      {/* Step 2: Student selector — filtered by class */}
+                      <FormField control={addForm.control} name="studentId" render={({ field }) => {
+                        const studentsInClass = selectedClassId
+                          ? (students ?? [])
+                              .filter(s => Number(s.classId) === Number(selectedClassId))
+                              .slice()
+                              .sort((a, b) =>
+                                (a.admissionNumber ?? "").localeCompare(b.admissionNumber ?? "", undefined, { numeric: true })
+                              )
+                          : [];
+                        return (
+                          <FormItem>
+                            <FormLabel>Student * <span className="text-xs text-gray-500 font-normal">{selectedClassId ? `(${studentsInClass.length} students)` : "(select class first)"}</span></FormLabel>
+                            <Select
+                              value={field.value}
+                              onValueChange={val => handleStudentChange(val, field.onChange)}
+                              disabled={!selectedClassId}
+                            >
+                              <FormControl>
+                                <SelectTrigger><SelectValue placeholder={selectedClassId ? "Select student" : "Choose a class above first"} /></SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="max-h-72 overflow-y-auto">
+                                {studentsInClass.length === 0 ? (
+                                  <div className="px-3 py-4 text-sm text-gray-500 text-center">No students in this class</div>
+                                ) : (
+                                  studentsInClass.map(s => (
+                                    <SelectItem key={s.id} value={String(s.id)}>
+                                      {s.admissionNumber} — {s.name}
+                                    </SelectItem>
+                                  ))
+                                )}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        );
+                      }} />
+
+                      {/* Fee structure status banner */}
+                      {selectedClassId && feeStructures.find(s => s.classId === Number(selectedClassId)) && (
+                        <div className="bg-emerald-50 border border-emerald-200 rounded px-3 py-2 text-xs text-emerald-700">
+                          ✓ Amount auto-filled from <strong>{classes?.find(c => c.id === Number(selectedClassId))?.name}</strong> fee structure
                         </div>
                       )}
 
