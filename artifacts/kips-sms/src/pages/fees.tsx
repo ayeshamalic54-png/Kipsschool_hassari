@@ -911,13 +911,14 @@ export default function Fees() {
                   <Form {...addForm}>
                     <form onSubmit={addForm.handleSubmit(onAddSubmit)} className="space-y-4">
                       {/* Step 1: Class selector */}
-                      <FormItem>
-                        <FormLabel>Class * <span className="text-xs text-gray-500 font-normal">(select first)</span></FormLabel>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium leading-none">
+                          Class * <span className="text-xs text-gray-500 font-normal">(select first)</span>
+                        </label>
                         <Select
                           value={selectedClassId}
                           onValueChange={cid => {
                             setSelectedClassId(cid);
-                            // Reset student & auto-fill fee from structure for this class
                             addForm.setValue("studentId", "");
                             const structure = feeStructures.find(s => s.classId === Number(cid));
                             if (structure) {
@@ -933,7 +934,7 @@ export default function Fees() {
                             ))}
                           </SelectContent>
                         </Select>
-                      </FormItem>
+                      </div>
 
                       {/* Step 2: Student selector — filtered by class */}
                       <FormField control={addForm.control} name="studentId" render={({ field }) => {
