@@ -2,7 +2,11 @@ import { useState, useRef, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Download, Upload, Trash2, RefreshCw, Shield, Database, Clock, CheckCircle, CalendarClock, Play, AlertCircle, Zap, RotateCcw, Calculator, Save } from "lucide-react";
+import {
+  Download, Upload, Trash2, RefreshCw, Shield, Database, Clock,
+  CheckCircle, CalendarClock, Play, AlertCircle, Zap, RotateCcw,
+  Calculator, Save,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 interface SavedBackup {
@@ -21,22 +25,6 @@ interface AutoBackupStatus {
   autoBackupFiles: string[];
 }
 
-const API = "/api/admin";
-
-function authHeader() {
-  const token = localStorage.getItem("kips_token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function apiFetch(path: string, opts: RequestInit = {}) {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: { ...authHeader(), "Content-Type": "application/json", ...(opts.headers ?? {}) },
-  });
-  if (!res.ok) throw new Error((await res.json()).error ?? "Request failed");
-  return res;
-}
-
 interface DeductionCriteria {
   workingDaysPerMonth: number;
   absentPenaltyFraction: string;
@@ -44,21 +32,63 @@ interface DeductionCriteria {
   leavePenaltyFraction: string;
 }
 
+const API = "/api/admin";
+
+// ── Token — multiple possible keys try karta hai ─────────────────────────────
+function getToken(): string {
+  return (
+    localStorage.getItem("kips_token") ??
+    localStorage.getItem("token")      ??
+    localStorage.getItem("authToken")  ??
+    sessionStorage.getItem("token")    ??
+    ""
+  );
+}
+
+function authHeader(): Record<string, string> {
+  const t = getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+// ── Safe fetch wrapper ────────────────────────────────────────────────────────
+async function apiFetch(path: string, opts: RequestInit = {}): Promise<Response> {
+  const res = await fetch(`${API}${path}`, {
+    ...opts,
+    headers: {
+      ...authHeader(),
+      "Content-Type": "application/json",
+      ...(opts.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    let errMsg = `HTTP ${res.status}`;
+    try {
+      const clone = res.clone();
+      const json = await clone.json();
+      errMsg = json.error ?? json.message ?? errMsg;
+    } catch { /* response not JSON — keep HTTP status */ }
+    throw new Error(errMsg);
+  }
+  return res;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function Settings() {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [backups, setBackups] = useState<SavedBackup[]>([]);
-  const [loadingBackups, setLoadingBackups] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [restoring, setRestoring] = useState(false);
-  const [lastAutoBackup, setLastAutoBackup] = useState<string | null>(null);
-  const [autoStatus, setAutoStatus] = useState<AutoBackupStatus | null>(null);
-  const [loadingAutoStatus, setLoadingAutoStatus] = useState(false);
-  const [runningNow, setRunningNow] = useState(false);
 
-  // ── Deduction criteria ──────────────────────────────────────────────────────
+  const [backups,           setBackups]           = useState<SavedBackup[]>([]);
+  const [loadingBackups,    setLoadingBackups]    = useState(false);
+  const [saving,            setSaving]            = useState(false);
+  const [restoring,         setRestoring]         = useState(false);
+  const [restoreTarget,     setRestoreTarget]     = useState<string>("");   // which file is being restored
+  const [autoStatus,        setAutoStatus]        = useState<AutoBackupStatus | null>(null);
+  const [loadingAutoStatus, setLoadingAutoStatus] = useState(false);
+  const [runningNow,        setRunningNow]        = useState(false);
+
+  // ── Deduction criteria ────────────────────────────────────────────────────
   const [criteria, setCriteria] = useState<DeductionCriteria>({
-    workingDaysPerMonth: 26,
+    workingDaysPerMonth:   26,
     absentPenaltyFraction: "1.00",
     latePenaltyFraction:   "0.50",
     leavePenaltyFraction:  "0.00",
@@ -69,8 +99,10 @@ export default function Settings() {
   const loadCriteria = async () => {
     setCriteriaLoading(true);
     try {
-      const res = await fetch("/api/settings", { headers: authHeader() as HeadersInit });
-      if (!res.ok) throw new Error("Failed");
+      const res = await fetch("/api/settings", {
+        headers: authHeader() as HeadersInit,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setCriteria({
         workingDaysPerMonth:   Number(data.workingDaysPerMonth)   || 26,
@@ -79,7 +111,7 @@ export default function Settings() {
         leavePenaltyFraction:  String(data.leavePenaltyFraction  ?? "0.00"),
       });
     } catch {
-      toast({ variant: "destructive", title: "Failed to load deduction criteria" });
+      toast({ variant: "destructive", title: "Deduction criteria load nahi hue" });
     } finally {
       setCriteriaLoading(false);
     }
@@ -89,9 +121,9 @@ export default function Settings() {
     setCriteriaSaving(true);
     try {
       const res = await fetch("/api/settings", {
-        method: "PUT",
+        method:  "PUT",
         headers: { ...authHeader(), "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body:    JSON.stringify({
           workingDaysPerMonth:   Number(criteria.workingDaysPerMonth),
           absentPenaltyFraction: Number(criteria.absentPenaltyFraction),
           latePenaltyFraction:   Number(criteria.latePenaltyFraction),
@@ -100,11 +132,11 @@ export default function Settings() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || "Failed");
+        throw new Error((err as any).error || "Failed");
       }
-      toast({ title: "Deduction criteria saved ✓", description: "New rules apply to future deduction calculations." });
+      toast({ title: "Deduction criteria save ho gaye ✓" });
       await loadCriteria();
-    } catch (err: unknown) {
+    } catch (err) {
       toast({ variant: "destructive", title: "Save failed", description: String(err) });
     } finally {
       setCriteriaSaving(false);
@@ -114,180 +146,232 @@ export default function Settings() {
   useEffect(() => {
     loadAutoStatus();
     loadCriteria();
+    loadBackups();
   }, []);
 
+  // ── Auto-backup status ────────────────────────────────────────────────────
   const loadAutoStatus = async () => {
     setLoadingAutoStatus(true);
     try {
       const res = await apiFetch("/auto-backup/status");
       setAutoStatus(await res.json());
-    } catch {
-      // silently fail
-    } finally {
-      setLoadingAutoStatus(false);
-    }
+    } catch { /* silently fail */ }
+    finally { setLoadingAutoStatus(false); }
   };
 
   const runBackupNow = async () => {
     setRunningNow(true);
     try {
       await apiFetch("/auto-backup/run-now", { method: "POST" });
-      toast({ title: "Backup complete!", description: "Auto-backup ran successfully right now." });
-      await loadAutoStatus();
-      await loadBackups();
-    } catch (err: unknown) {
+      toast({ title: "Backup complete!", description: "Auto-backup abhi chalaya gaya." });
+      await Promise.all([loadAutoStatus(), loadBackups()]);
+    } catch (err) {
       toast({ variant: "destructive", title: "Backup failed", description: String(err) });
     } finally {
       setRunningNow(false);
     }
   };
 
+  // ── Server backups list ───────────────────────────────────────────────────
   const loadBackups = async () => {
     setLoadingBackups(true);
     try {
       const res = await apiFetch("/backups");
       setBackups(await res.json());
     } catch {
-      toast({ variant: "destructive", title: "Failed to load backups" });
+      toast({ variant: "destructive", title: "Backups list load nahi hua" });
     } finally {
       setLoadingBackups(false);
     }
   };
 
+  // ── Download current DB as backup file ───────────────────────────────────
   const downloadBackup = async () => {
     try {
       const res = await apiFetch("/backup");
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `kips-backup-${new Date().toISOString().slice(0,10)}.json`;
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `kips-backup-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Backup downloaded successfully" });
-    } catch {
-      toast({ variant: "destructive", title: "Backup download failed" });
+      toast({ title: "Backup file download ho gayi ✓" });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Download failed", description: String(err) });
     }
   };
 
+  // ── Save backup to server folder ─────────────────────────────────────────
   const saveToServer = async () => {
     setSaving(true);
     try {
-      const res = await apiFetch("/backup/save", { method: "POST" });
+      const res  = await apiFetch("/backup/save", { method: "POST" });
       const data = await res.json();
-      toast({ title: "Backup saved to server", description: data.filename });
-      setLastAutoBackup(new Date().toLocaleString("en-PK"));
+      toast({ title: "Server pe save ho gaya ✓", description: data.filename });
       await loadBackups();
-    } catch {
-      toast({ variant: "destructive", title: "Server backup failed" });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Server backup failed", description: String(err) });
     } finally {
       setSaving(false);
     }
   };
 
+  // ── Delete a saved backup ─────────────────────────────────────────────────
   const deleteBackup = async (filename: string) => {
-    if (!confirm(`Delete backup: ${filename}?`)) return;
+    if (!confirm(`Delete backup:\n${filename}\n\nYe backup hamesha ke liye delete ho jayega.`)) return;
     try {
       await apiFetch(`/backups/${encodeURIComponent(filename)}`, { method: "DELETE" });
-      toast({ title: "Backup deleted" });
+      toast({ title: "Backup delete ho gaya" });
       await loadBackups();
-    } catch {
-      toast({ variant: "destructive", title: "Delete failed" });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Delete failed", description: String(err) });
     }
   };
 
+  // ── Download a saved backup file ──────────────────────────────────────────
   const downloadSaved = async (filename: string) => {
     try {
-      const res = await apiFetch(`/backups/${encodeURIComponent(filename)}`);
+      const res  = await apiFetch(`/backups/${encodeURIComponent(filename)}`);
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
       a.download = filename;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      toast({ variant: "destructive", title: "Download failed" });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Download failed", description: String(err) });
     }
   };
 
-  const confirmAndRestore = (d: { students?: unknown[]; fees?: unknown[]; attendance?: unknown[]; salaries?: unknown[]; accountEntries?: unknown[] }, timestamp: string) => {
-    const students = d?.students?.length ?? 0;
-    const fees = d?.fees?.length ?? 0;
-    const attendance = d?.attendance?.length ?? 0;
-    const salaries = d?.salaries?.length ?? 0;
-    const accounts = d?.accountEntries?.length ?? 0;
-    const warning = students === 0
-      ? `⚠️ WARNING: This backup has no students (0 students)!\n\nRestoring will delete ALL current students!\n\nBackup time: ${timestamp}\n\nAre you SURE you want to restore?`
-      : `Backup contents:\n• Students: ${students}\n• Fees: ${fees}\n• Attendance: ${attendance}\n• Salaries: ${salaries}\n• Accounts: ${accounts}\n\nBackup time: ${timestamp}\n\nThis will replace all current data. Proceed with restore?`;
-    return confirm(warning);
+  // ── Confirm dialog with data counts ──────────────────────────────────────
+  const confirmRestore = (
+    d: { students?: unknown[]; fees?: unknown[]; attendance?: unknown[]; salaries?: unknown[]; accountEntries?: unknown[]; classes?: unknown[] },
+    timestamp: string
+  ): boolean => {
+    const students  = d?.students?.length  ?? 0;
+    const classes   = d?.classes?.length   ?? 0;
+    const fees      = d?.fees?.length      ?? 0;
+    const attendance= d?.attendance?.length?? 0;
+    const salaries  = d?.salaries?.length  ?? 0;
+    const accounts  = d?.accountEntries?.length ?? 0;
+
+    const warn = students === 0
+      ? `⚠️ KHABARDAR: Is backup mein 0 students hain!\n\nRestore karne se SARE current students delete ho jayenge!\n\nBackup time: ${timestamp}\n\nKya ap YAQEENAN restore karna chahte hain?`
+      : `Backup ki details:\n• Classes: ${classes}\n• Students: ${students}\n• Fees: ${fees}\n• Attendance: ${attendance}\n• Salaries: ${salaries}\n• Accounts: ${accounts}\n\nBackup time: ${timestamp}\n\nYe sab current data replace ho jayega.\n\nRestore karein?`;
+    return confirm(warn);
   };
 
+  // ── Show restore result toast ─────────────────────────────────────────────
   const showRestoreResult = (data: { studentsRestored?: number; preBackup?: string; errors?: string[] }) => {
     const count = data.studentsRestored ?? 0;
-    const errs = data.errors ?? [];
+    const errs  = data.errors ?? [];
     if (errs.length > 0) {
-      toast({ variant: "destructive", title: `Restore with ${errs.length} errors`, description: `Students restored: ${count}. Errors: ${errs.slice(0, 2).join("; ")}` });
+      toast({
+        variant:     "destructive",
+        title:       `Restore complete — ${errs.length} warning(s)`,
+        description: `Students restore hue: ${count}. Errors: ${errs.slice(0, 3).join(" | ")}`,
+      });
     } else {
-      toast({ title: `Restore complete ✓  (${count} students restored)`, description: `Safety backup: ${data.preBackup}` });
+      toast({
+        title:       `Restore mukammal ✓  (${count} students)`,
+        description: `Safety backup: ${data.preBackup}`,
+      });
     }
   };
 
+  // ── Restore from uploaded JSON file ──────────────────────────────────────
   const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    let backup: { data?: { students?: unknown[]; fees?: unknown[]; attendance?: unknown[]; salaries?: unknown[]; accountEntries?: unknown[] }; timestamp?: string };
+
+    let backup: {
+      data?: { students?: unknown[]; fees?: unknown[]; attendance?: unknown[]; salaries?: unknown[]; accountEntries?: unknown[]; classes?: unknown[] };
+      timestamp?: string;
+    };
+
     try {
-      backup = JSON.parse(await file.text());
-      if (!confirmAndRestore(backup.data ?? {}, backup.timestamp ?? "unknown")) {
-        e.target.value = ""; return;
-      }
-    } catch {
-      toast({ variant: "destructive", title: "Invalid backup file", description: "Could not parse backup file" });
-      e.target.value = ""; return;
+      const text = await file.text();
+      backup = JSON.parse(text);
+      if (!backup?.data) throw new Error("data field missing");
+    } catch (parseErr) {
+      toast({ variant: "destructive", title: "Invalid backup file", description: "JSON parse error ya galat format" });
+      e.target.value = "";
+      return;
     }
+
+    if (!confirmRestore(backup.data ?? {}, backup.timestamp ?? "unknown")) {
+      e.target.value = "";
+      return;
+    }
+
     setRestoring(true);
+    setRestoreTarget(file.name);
     try {
-      const res = await apiFetch("/restore", { method: "POST", body: JSON.stringify(backup) });
-      showRestoreResult(await res.json());
+      const res  = await apiFetch("/restore", {
+        method: "POST",
+        body:   JSON.stringify(backup),
+      });
+      const data = await res.json();
+      showRestoreResult(data);
       await loadBackups();
-    } catch (err: unknown) {
+    } catch (err) {
       toast({ variant: "destructive", title: "Restore failed", description: String(err) });
     } finally {
       setRestoring(false);
+      setRestoreTarget("");
       e.target.value = "";
     }
   };
 
+  // ── Restore from server-saved backup ─────────────────────────────────────
   const restoreFromServer = async (filename: string) => {
-    setRestoring(true);
+    // 1. Backup ka content fetch karo confirmation ke liye
+    let backup: {
+      data?: { students?: unknown[]; fees?: unknown[]; attendance?: unknown[]; salaries?: unknown[]; accountEntries?: unknown[]; classes?: unknown[] };
+      timestamp?: string;
+    };
     try {
-      // First fetch the backup to show confirmation
       const peekRes = await apiFetch(`/backups/${encodeURIComponent(filename)}`);
-      const backup = await peekRes.json();
-      if (!confirmAndRestore(backup.data ?? {}, backup.timestamp ?? filename)) {
-        setRestoring(false); return;
-      }
-      const res = await apiFetch(`/restore-from-server/${encodeURIComponent(filename)}`, { method: "POST" });
-      showRestoreResult(await res.json());
+      backup = await peekRes.json();
+      if (!backup?.data) throw new Error("Invalid backup format");
+    } catch (err) {
+      toast({ variant: "destructive", title: "Backup preview failed", description: String(err) });
+      return;
+    }
+
+    if (!confirmRestore(backup.data ?? {}, backup.timestamp ?? filename)) return;
+
+    setRestoring(true);
+    setRestoreTarget(filename);
+    try {
+      // 2. Server-side restore (file already on server, no re-upload needed)
+      const res  = await apiFetch(`/restore-from-server/${encodeURIComponent(filename)}`, { method: "POST" });
+      const data = await res.json();
+      showRestoreResult(data);
       await loadBackups();
-    } catch (err: unknown) {
+    } catch (err) {
       toast({ variant: "destructive", title: "Restore failed", description: String(err) });
     } finally {
       setRestoring(false);
+      setRestoreTarget("");
     }
   };
 
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <Shield className="w-6 h-6 text-blue-600" /> Settings & Backup
         </h1>
-        <p className="text-gray-500 text-sm mt-1">Manage deduction criteria, system backups, and data restore</p>
+        <p className="text-gray-500 text-sm mt-1">
+          Deduction criteria, system backups, aur data restore manage karein
+        </p>
       </div>
 
-      {/* Deduction Criteria */}
+      {/* ── Deduction Criteria ──────────────────────────────────────────── */}
       <Card className="border-0 shadow-sm overflow-hidden">
         <div className="bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-4">
           <div className="flex items-center gap-2">
@@ -295,13 +379,14 @@ export default function Settings() {
             <h2 className="text-white font-semibold text-base">Deduction Criteria</h2>
           </div>
           <p className="text-white/80 text-xs mt-1">
-            Controls how attendance affects salary &amp; fee deductions. Per-day rate = amount ÷ working days. Each absent/late/leave day deducts (per-day × fraction).
+            Attendance ka salary/fee deductions par asar. Per-day rate = amount ÷ working days.
+            Har absent/late/leave day mein (per-day × fraction) kata hai.
           </p>
         </div>
         <CardContent className="p-5 space-y-4">
           {criteriaLoading ? (
             <div className="flex items-center gap-2 text-gray-400 text-sm">
-              <RefreshCw className="w-4 h-4 animate-spin" /> Loading criteria…
+              <RefreshCw className="w-4 h-4 animate-spin" /> Loading…
             </div>
           ) : (
             <>
@@ -316,7 +401,7 @@ export default function Settings() {
                     onChange={e => setCriteria(c => ({ ...c, workingDaysPerMonth: Number(e.target.value) || 0 }))}
                     className="h-9"
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">Used to compute per-day rate (default 26)</p>
+                  <p className="text-[11px] text-gray-400 mt-1">Default: 26</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-600 block mb-1">
@@ -328,7 +413,7 @@ export default function Settings() {
                     onChange={e => setCriteria(c => ({ ...c, absentPenaltyFraction: e.target.value }))}
                     className="h-9"
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">1.00 = full day deducted (default)</p>
+                  <p className="text-[11px] text-gray-400 mt-1">1.00 = pura din kata (default)</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-600 block mb-1">
@@ -340,7 +425,7 @@ export default function Settings() {
                     onChange={e => setCriteria(c => ({ ...c, latePenaltyFraction: e.target.value }))}
                     className="h-9"
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">0.50 = half day deducted (default)</p>
+                  <p className="text-[11px] text-gray-400 mt-1">0.50 = adha din kata (default)</p>
                 </div>
                 <div>
                   <label className="text-xs font-semibold text-gray-600 block mb-1">
@@ -352,7 +437,7 @@ export default function Settings() {
                     onChange={e => setCriteria(c => ({ ...c, leavePenaltyFraction: e.target.value }))}
                     className="h-9"
                   />
-                  <p className="text-[11px] text-gray-400 mt-1">0.00 = no deduction (default)</p>
+                  <p className="text-[11px] text-gray-400 mt-1">0.00 = koi deduction nahi (default)</p>
                 </div>
               </div>
 
@@ -363,15 +448,17 @@ export default function Settings() {
                 const lf  = Number(criteria.latePenaltyFraction);
                 const lvf = Number(criteria.leavePenaltyFraction);
                 const example = 26000;
-                const perDay = Math.round(example / wd);
+                const perDay  = Math.round(example / wd);
                 return (
                   <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-sm">
-                    <p className="text-xs font-semibold text-amber-800 mb-1">Example: salary PKR {example.toLocaleString()}</p>
+                    <p className="text-xs font-semibold text-amber-800 mb-1">
+                      Misaal: salary PKR {example.toLocaleString()}
+                    </p>
                     <div className="text-xs text-amber-700 space-y-0.5">
                       <div>Per-day rate: <strong>PKR {perDay.toLocaleString()}</strong> (= {example.toLocaleString()} ÷ {wd})</div>
-                      <div>1 absent day = <strong>−PKR {Math.round(perDay * af).toLocaleString()}</strong></div>
-                      <div>1 late day = <strong>−PKR {Math.round(perDay * lf).toLocaleString()}</strong></div>
-                      <div>1 leave day = <strong>−PKR {Math.round(perDay * lvf).toLocaleString()}</strong></div>
+                      <div>1 absent din = <strong>−PKR {Math.round(perDay * af).toLocaleString()}</strong></div>
+                      <div>1 late din   = <strong>−PKR {Math.round(perDay * lf).toLocaleString()}</strong></div>
+                      <div>1 leave din  = <strong>−PKR {Math.round(perDay * lvf).toLocaleString()}</strong></div>
                     </div>
                   </div>
                 );
@@ -396,7 +483,7 @@ export default function Settings() {
               <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
                 <p className="text-xs text-blue-700">
-                  Changes apply to <strong>future</strong> calculations: Monthly Deductions report, Salary Slip auto-fill, and Student deductions. Already-saved salaries are not recomputed.
+                  Changes sirf <strong>future</strong> calculations pe lagenge. Already-save salaries recompute nahi honge.
                 </p>
               </div>
             </>
@@ -404,7 +491,7 @@ export default function Settings() {
         </CardContent>
       </Card>
 
-      {/* Auto Daily Backup */}
+      {/* ── Auto Daily Backup ───────────────────────────────────────────── */}
       <Card className="border-0 shadow-sm overflow-hidden">
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-4">
           <div className="flex items-center justify-between">
@@ -417,7 +504,9 @@ export default function Settings() {
               Active
             </span>
           </div>
-          <p className="text-white/70 text-xs mt-1">Automatically backs up every day at midnight (12:00 AM) Pakistan time</p>
+          <p className="text-white/70 text-xs mt-1">
+            Har roz raat 12 baje (Pakistan time) automatic backup hota hai
+          </p>
         </div>
         <CardContent className="p-5 space-y-4">
           {loadingAutoStatus ? (
@@ -427,7 +516,9 @@ export default function Settings() {
           ) : autoStatus ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Clock className="w-3 h-3" /> Last Backup</p>
+                <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Last Backup
+                </p>
                 {autoStatus.lastRun ? (
                   <div>
                     <p className="text-sm font-semibold text-gray-800">
@@ -438,11 +529,13 @@ export default function Settings() {
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-400">Never run</p>
+                  <p className="text-sm text-gray-400">Abhi tak nahi chala</p>
                 )}
               </div>
               <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Status</p>
+                <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                  <CheckCircle className="w-3 h-3" /> Status
+                </p>
                 {autoStatus.lastStatus === "success" ? (
                   <div className="flex items-center gap-1.5">
                     <CheckCircle className="w-4 h-4 text-emerald-500" />
@@ -454,16 +547,20 @@ export default function Settings() {
                       <AlertCircle className="w-4 h-4 text-red-500" />
                       <span className="text-sm font-semibold text-red-700">Error</span>
                     </div>
-                    {autoStatus.lastError && <p className="text-xs text-red-400 mt-0.5">{autoStatus.lastError}</p>}
+                    {autoStatus.lastError && (
+                      <p className="text-xs text-red-400 mt-0.5 break-all">{autoStatus.lastError}</p>
+                    )}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-400">Pending...</p>
                 )}
               </div>
               <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                <p className="text-xs text-gray-500 mb-1 flex items-center gap-1"><Database className="w-3 h-3" /> Saved Backups</p>
+                <p className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                  <Database className="w-3 h-3" /> Saved Backups
+                </p>
                 <p className="text-sm font-semibold text-gray-800">{autoStatus.autoBackupCount} files</p>
-                <p className="text-xs text-gray-400">Max 7 kept</p>
+                <p className="text-xs text-gray-400">Max 7 rakhay jate hain</p>
               </div>
             </div>
           ) : null}
@@ -487,14 +584,14 @@ export default function Settings() {
           <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 flex items-start gap-2">
             <Zap className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
             <p className="text-xs text-blue-700">
-              <strong>Last 7 days of backups</strong> are automatically saved. Older backups are deleted when the limit is reached.
-              Backup filename: <code className="bg-blue-100 px-1 rounded">auto-backup-YYYY-MM-DD...</code>
+              <strong>Last 7 din ke backups</strong> automatically save rehte hain. Purane delete ho jate hain.
+              Filename: <code className="bg-blue-100 px-1 rounded">auto-backup-YYYY-MM-DD...</code>
             </p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Manual Backup */}
+      {/* ── Manual Backup ───────────────────────────────────────────────── */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -502,25 +599,24 @@ export default function Settings() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-gray-500">Download a full backup of all data (students, fees, attendance, exams, staff, accounts, certificates) as a JSON file.</p>
+          <p className="text-sm text-gray-500">
+            Sab data ka full backup download karein ya server pe save karein (students, fees, attendance, exams, staff, accounts, certificates).
+          </p>
           <div className="flex flex-wrap gap-3">
             <Button onClick={downloadBackup} className="bg-emerald-600 hover:bg-emerald-700 text-white">
               <Download className="w-4 h-4 mr-2" /> Download Backup File
             </Button>
             <Button onClick={saveToServer} disabled={saving} variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50">
-              {saving ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Database className="w-4 h-4 mr-2" />}
-              Save Backup to Server
+              {saving
+                ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+                : <><Database className="w-4 h-4 mr-2" /> Save Backup to Server</>
+              }
             </Button>
           </div>
-          {lastAutoBackup && (
-            <p className="text-xs text-gray-400 flex items-center gap-1">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-500" /> Last saved: {lastAutoBackup}
-            </p>
-          )}
         </CardContent>
       </Card>
 
-      {/* Restore */}
+      {/* ── Restore ─────────────────────────────────────────────────────── */}
       <Card className="border-amber-200">
         <CardHeader>
           <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -529,65 +625,95 @@ export default function Settings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-            <strong>Warning:</strong> Restoring will replace all current student, fee, attendance, exam, and financial data with the backup. Staff records are preserved. A pre-restore backup is saved automatically. The backup data count will be shown before restoring.
+            <strong>Khabardar:</strong> Restore karne se current students, fees, attendance, exams, aur financial data backup se replace ho jayega.
+            Staff records mahfooz rehenge. Restore se pehle safety backup automatically ban jata hai.
+            Restore karne se pehle data count confirm karna hoga.
           </div>
+
+          {restoring && restoreTarget && (
+            <div className="flex items-center gap-2 text-blue-700 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm">
+              <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+              <span>Restore ho raha hai: <strong>{restoreTarget}</strong> — please wait…</span>
+            </div>
+          )}
+
           <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleRestore} />
           <Button
             onClick={() => fileRef.current?.click()}
             disabled={restoring}
             className="bg-amber-600 hover:bg-amber-700 text-white"
           >
-            {restoring ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
-            {restoring ? "Restoring..." : "Choose Backup File & Restore"}
+            {restoring
+              ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> Restoring...</>
+              : <><Upload className="w-4 h-4 mr-2" /> Backup File Choose Karein & Restore</>
+            }
           </Button>
         </CardContent>
       </Card>
 
-      {/* Server Backups */}
+      {/* ── Server Backups List ─────────────────────────────────────────── */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Clock className="w-4 h-4 text-blue-600" /> Saved Backups on Server
+            <Clock className="w-4 h-4 text-blue-600" /> Server pe Saved Backups
           </CardTitle>
           <Button size="sm" variant="outline" onClick={loadBackups} disabled={loadingBackups}>
             <RefreshCw className={`w-3.5 h-3.5 mr-1 ${loadingBackups ? "animate-spin" : ""}`} /> Refresh
           </Button>
         </CardHeader>
         <CardContent>
-          {backups.length === 0 ? (
+          {loadingBackups ? (
+            <div className="flex items-center gap-2 text-gray-400 text-sm py-4">
+              <RefreshCw className="w-4 h-4 animate-spin" /> Loading backups...
+            </div>
+          ) : backups.length === 0 ? (
             <div className="text-center py-10 text-gray-400">
               <Database className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No server backups yet. Click "Save Backup to Server" to create one.</p>
+              <p className="text-sm">Abhi koi server backup nahi. "Save Backup to Server" click karein.</p>
               <Button size="sm" variant="outline" className="mt-3" onClick={loadBackups}>
-                Load List
+                List Load Karein
               </Button>
             </div>
           ) : (
             <div className="space-y-2">
               {backups.map(b => (
-                <div key={b.filename} className={`flex items-center justify-between p-3 rounded-lg border ${b.filename.startsWith("auto-backup") ? "bg-blue-50 border-blue-100" : b.filename.startsWith("pre-restore") ? "bg-amber-50 border-amber-100" : "bg-gray-50 border-gray-100"}`}>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-mono font-medium text-gray-800">{b.filename}</p>
+                <div
+                  key={b.filename}
+                  className={`flex items-center justify-between p-3 rounded-lg border ${
+                    b.filename.startsWith("auto-backup")  ? "bg-blue-50  border-blue-100"  :
+                    b.filename.startsWith("pre-restore")  ? "bg-amber-50 border-amber-100" :
+                    "bg-gray-50 border-gray-100"
+                  }`}
+                >
+                  <div className="min-w-0 mr-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-mono font-medium text-gray-800 truncate">{b.filename}</p>
                       {b.filename.startsWith("auto-backup") && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium">Auto</span>
+                        <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-medium shrink-0">Auto</span>
                       )}
                       {b.filename.startsWith("pre-restore") && (
-                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium">Safety</span>
+                        <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-medium shrink-0">Safety</span>
                       )}
                     </div>
                     <p className="text-xs text-gray-400 mt-0.5">
                       {new Date(b.createdAt).toLocaleString("en-PK")} · {(b.size / 1024).toFixed(1)} KB
                     </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => restoreFromServer(b.filename)} disabled={restoring}>
-                      <RotateCcw className="w-3.5 h-3.5 mr-1" /> Restore
+                  <div className="flex gap-2 shrink-0">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                      onClick={() => restoreFromServer(b.filename)}
+                      disabled={restoring}
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                      {restoring && restoreTarget === b.filename ? "..." : "Restore"}
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => downloadSaved(b.filename)}>
+                    <Button size="sm" variant="outline" onClick={() => downloadSaved(b.filename)} disabled={restoring}>
                       <Download className="w-3.5 h-3.5" />
                     </Button>
-                    <Button size="sm" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={() => deleteBackup(b.filename)}>
+                    <Button size="sm" variant="ghost" className="text-red-500 hover:bg-red-50" onClick={() => deleteBackup(b.filename)} disabled={restoring}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>

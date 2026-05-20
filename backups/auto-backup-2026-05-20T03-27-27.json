@@ -1,0 +1,500 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-05-20T03:27:27.935Z",
+  "note": "auto-daily-backup",
+  "data": {
+    "students": [],
+    "fees": [
+      {
+        "id": 3,
+        "studentId": 126,
+        "amount": "1000.00",
+        "paidAmount": "802.00",
+        "month": "2026-05",
+        "dueDate": "2026-05-13",
+        "paidDate": "2026-05-20",
+        "status": "paid",
+        "fine": "0.00",
+        "discount": "198.00",
+        "notes": null,
+        "createdAt": "2026-05-20T02:55:54.147Z"
+      }
+    ],
+    "attendance": [
+      {
+        "id": 1,
+        "studentId": 6,
+        "staffId": null,
+        "date": "2026-05-19",
+        "type": "student",
+        "status": "present",
+        "createdAt": "2026-05-19T21:50:01.781Z"
+      },
+      {
+        "id": 3,
+        "studentId": 126,
+        "staffId": null,
+        "date": "2026-05-20",
+        "type": "student",
+        "status": "late",
+        "createdAt": "2026-05-20T03:06:28.626Z"
+      }
+    ],
+    "exams": [
+      {
+        "id": 1,
+        "name": "awais",
+        "classId": 13,
+        "subject": "ENGLISH",
+        "examDate": "2026-05-12",
+        "totalMarks": "100.00",
+        "passingMarks": "85.00",
+        "createdAt": "2026-05-20T02:51:44.453Z"
+      }
+    ],
+    "examResults": [
+      {
+        "id": 1,
+        "examId": 1,
+        "studentId": 126,
+        "marksObtained": "85.00",
+        "grade": "A",
+        "position": null,
+        "remarks": null,
+        "createdAt": "2026-05-20T02:52:10.149Z"
+      }
+    ],
+    "staff": [
+      {
+        "id": 45,
+        "name": "Ambreen",
+        "role": "admin",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Principal",
+        "salary": "20000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "ambreen.principal",
+        "createdAt": "2026-05-19T16:59:44.193Z",
+        "updatedAt": "2026-05-19T16:59:44.193Z"
+      },
+      {
+        "id": 46,
+        "name": "Nosheen",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Senior Teacher",
+        "salary": "7000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "nosheen.teacher",
+        "createdAt": "2026-05-19T16:59:44.319Z",
+        "updatedAt": "2026-05-19T16:59:44.319Z"
+      },
+      {
+        "id": 47,
+        "name": "Ayesha",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Co-ordinator",
+        "salary": "5500.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "ayesha.teacher",
+        "createdAt": "2026-05-19T16:59:44.563Z",
+        "updatedAt": "2026-05-19T16:59:44.563Z"
+      },
+      {
+        "id": 48,
+        "name": "Muneeba",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Teacher",
+        "salary": "3500.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "muneeba.teacher",
+        "createdAt": "2026-05-19T16:59:44.800Z",
+        "updatedAt": "2026-05-19T16:59:44.800Z"
+      },
+      {
+        "id": 49,
+        "name": "Noreen",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Montessori Teacher",
+        "salary": "4000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "noreen.teacher",
+        "createdAt": "2026-05-19T16:59:45.038Z",
+        "updatedAt": "2026-05-19T16:59:45.038Z"
+      },
+      {
+        "id": 50,
+        "name": "Maira",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Helper",
+        "salary": "2000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "maira.teacher",
+        "createdAt": "2026-05-19T16:59:45.276Z",
+        "updatedAt": "2026-05-19T16:59:45.276Z"
+      },
+      {
+        "id": 51,
+        "name": "Irum",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Montessori Teacher",
+        "salary": "3500.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "irum.teacher",
+        "createdAt": "2026-05-19T16:59:45.516Z",
+        "updatedAt": "2026-05-19T16:59:45.516Z"
+      },
+      {
+        "id": 52,
+        "name": "Fatima",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Teacher",
+        "salary": "3000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "fatima.teacher",
+        "createdAt": "2026-05-19T16:59:45.757Z",
+        "updatedAt": "2026-05-19T16:59:45.757Z"
+      },
+      {
+        "id": 53,
+        "name": "Sohaiba",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Teacher",
+        "salary": "4000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "sohaiba.teacher",
+        "createdAt": "2026-05-19T16:59:45.994Z",
+        "updatedAt": "2026-05-19T16:59:45.994Z"
+      },
+      {
+        "id": 54,
+        "name": "Babar",
+        "role": "teacher",
+        "phone": "03195538767",
+        "email": null,
+        "address": null,
+        "subject": "Quran Teacher (Sb.)",
+        "salary": "7000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "babar.teacher",
+        "createdAt": "2026-05-19T16:59:46.234Z",
+        "updatedAt": "2026-05-19T16:59:46.234Z"
+      },
+      {
+        "id": 55,
+        "name": "Ghazi Baba",
+        "role": "support",
+        "phone": "03109039941",
+        "email": null,
+        "address": null,
+        "subject": "Guard / C-4",
+        "salary": "6000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "ghazi.support",
+        "createdAt": "2026-05-19T16:59:46.474Z",
+        "updatedAt": "2026-05-19T16:59:46.474Z"
+      },
+      {
+        "id": 56,
+        "name": "Mariyam",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Montessori Teacher",
+        "salary": "3500.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "mariyam.teacher",
+        "createdAt": "2026-05-19T16:59:46.597Z",
+        "updatedAt": "2026-05-19T16:59:46.597Z"
+      },
+      {
+        "id": 57,
+        "name": "Attiqa",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Montessori Teacher",
+        "salary": "3500.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "attiqa.teacher",
+        "createdAt": "2026-05-19T16:59:46.836Z",
+        "updatedAt": "2026-05-19T16:59:46.836Z"
+      },
+      {
+        "id": 58,
+        "name": "Qari Muxtaza",
+        "role": "teacher",
+        "phone": "03361170055",
+        "email": null,
+        "address": null,
+        "subject": "Arabic Teacher",
+        "salary": "2000.00",
+        "joinDate": null,
+        "status": "active",
+        "username": "muxtaza.teacher",
+        "createdAt": "2026-05-19T16:59:47.074Z",
+        "updatedAt": "2026-05-19T16:59:47.074Z"
+      }
+    ],
+    "salaries": [],
+    "accountEntries": [
+      {
+        "id": 1,
+        "type": "income",
+        "amount": "1000.00",
+        "category": "canteen",
+        "description": "i have recieved amount for canteen",
+        "date": "2026-05-19",
+        "createdAt": "2026-05-19T21:47:31.240Z"
+      }
+    ],
+    "certificates": [],
+    "classes": [
+      {
+        "id": 13,
+        "name": "Play Group",
+        "grade": "P.G",
+        "sections": "A",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 14,
+        "name": "Nursery",
+        "grade": "Nur",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 15,
+        "name": "Prep",
+        "grade": "Prep",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 16,
+        "name": "Class 1",
+        "grade": "Grade 1",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 17,
+        "name": "Class 2",
+        "grade": "Grade 2",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 18,
+        "name": "Class 3",
+        "grade": "Grade 3",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 19,
+        "name": "Class 4",
+        "grade": "Grade 4",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 20,
+        "name": "Class 5",
+        "grade": "Grade 5",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 21,
+        "name": "Class 6",
+        "grade": "Grade 6",
+        "sections": "A,B",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 22,
+        "name": "Class 7",
+        "grade": "Grade 7",
+        "sections": "A",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 23,
+        "name": "Class 8",
+        "grade": "Grade 8",
+        "sections": "A",
+        "teacherId": null,
+        "createdAt": "2026-05-17T10:06:42.272Z"
+      },
+      {
+        "id": 24,
+        "name": "Class 9",
+        "grade": "Grade 9",
+        "sections": "A",
+        "teacherId": null,
+        "createdAt": "2026-05-18T17:05:17.836Z"
+      },
+      {
+        "id": 25,
+        "name": "Class 10",
+        "grade": "Grade 10",
+        "sections": "A",
+        "teacherId": null,
+        "createdAt": "2026-05-18T17:07:46.975Z"
+      },
+      {
+        "id": 26,
+        "name": "Class 10",
+        "grade": "Geade 10",
+        "sections": "B",
+        "teacherId": null,
+        "createdAt": "2026-05-18T17:08:06.985Z"
+      }
+    ],
+    "users": [
+      {
+        "id": 1,
+        "username": "admin",
+        "name": "School Administrator",
+        "role": "admin",
+        "email": "admin@kips.edu.pk"
+      },
+      {
+        "id": 1431,
+        "username": "nosheen.teacher",
+        "name": "Nosheen",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1432,
+        "username": "ayesha.teacher",
+        "name": "Ayesha",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1433,
+        "username": "muneeba.teacher",
+        "name": "Muneeba",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1434,
+        "username": "noreen.teacher",
+        "name": "Noreen",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1435,
+        "username": "maira.teacher",
+        "name": "Maira",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1436,
+        "username": "irum.teacher",
+        "name": "Irum",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1437,
+        "username": "fatima.teacher",
+        "name": "Fatima",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1438,
+        "username": "sohaiba.teacher",
+        "name": "Sohaiba",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1439,
+        "username": "babar.teacher",
+        "name": "Babar",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1440,
+        "username": "mariyam.teacher",
+        "name": "Mariyam",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1441,
+        "username": "attiqa.teacher",
+        "name": "Attiqa",
+        "role": "teacher",
+        "email": null
+      },
+      {
+        "id": 1442,
+        "username": "muxtaza.teacher",
+        "name": "Qari Muxtaza",
+        "role": "teacher",
+        "email": null
+      }
+    ]
+  }
+}

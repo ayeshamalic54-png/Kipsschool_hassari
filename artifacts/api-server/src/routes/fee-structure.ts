@@ -63,7 +63,6 @@ router.post("/", requireAuth, async (req, res) => {
       return;
     }
 
-    // get class name
     const [cls] = await db.select({ name: classesTable.name }).from(classesTable).where(eq(classesTable.id, Number(classId)));
     const className = cls?.name ?? "";
 
@@ -73,25 +72,32 @@ router.post("/", requireAuth, async (req, res) => {
     if (existing) {
       [row] = await db.update(feeStructuresTable).set({
         className,
-        monthlyFee:   String(monthlyFee),
+        monthlyFee:   String(monthlyFee   ?? 0),
         admissionFee: String(admissionFee ?? 0),
-        examFee:      String(examFee ?? 0),
-        libraryFee:   String(libraryFee ?? 0),
+        examFee:      String(examFee      ?? 0),
+        libraryFee:   String(libraryFee   ?? 0),
         transportFee: String(transportFee ?? 0),
       }).where(eq(feeStructuresTable.id, existing.id)).returning();
     } else {
       [row] = await db.insert(feeStructuresTable).values({
-        classId: Number(classId),
+        classId:      Number(classId),
         className,
-        monthlyFee:   String(monthlyFee),
+        monthlyFee:   String(monthlyFee   ?? 0),
         admissionFee: String(admissionFee ?? 0),
-        examFee:      String(examFee ?? 0),
-        libraryFee:   String(libraryFee ?? 0),
+        examFee:      String(examFee      ?? 0),
+        libraryFee:   String(libraryFee   ?? 0),
         transportFee: String(transportFee ?? 0),
       }).returning();
     }
 
-    res.status(existing ? 200 : 201).json({ ...row, monthlyFee: toNum(row.monthlyFee), admissionFee: toNum(row.admissionFee), examFee: toNum(row.examFee), libraryFee: toNum(row.libraryFee), transportFee: toNum(row.transportFee) });
+    res.status(existing ? 200 : 201).json({
+      ...row,
+      monthlyFee:   toNum(row.monthlyFee),
+      admissionFee: toNum(row.admissionFee),
+      examFee:      toNum(row.examFee),
+      libraryFee:   toNum(row.libraryFee),
+      transportFee: toNum(row.transportFee),
+    });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -117,7 +123,14 @@ router.put("/:id", requireAuth, async (req, res) => {
       transportFee: transportFee !== undefined ? String(transportFee) : existing.transportFee ?? "0",
     }).where(eq(feeStructuresTable.id, Number(req.params.id))).returning();
 
-    res.json({ ...updated, monthlyFee: toNum(updated.monthlyFee), admissionFee: toNum(updated.admissionFee), examFee: toNum(updated.examFee), libraryFee: toNum(updated.libraryFee), transportFee: toNum(updated.transportFee) });
+    res.json({
+      ...updated,
+      monthlyFee:   toNum(updated.monthlyFee),
+      admissionFee: toNum(updated.admissionFee),
+      examFee:      toNum(updated.examFee),
+      libraryFee:   toNum(updated.libraryFee),
+      transportFee: toNum(updated.transportFee),
+    });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

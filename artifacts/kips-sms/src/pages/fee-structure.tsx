@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useListClasses } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   LayoutList,
   Printer,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 
 // ─── Theme ───────────────────────────────────────────────────────────────────
@@ -34,34 +35,66 @@ const FEE_TYPES = [
 ] as const;
 
 type FeeKey = typeof FEE_TYPES[number]["key"];
-type FeesMap = Record<number, Partial<Record<FeeKey, number>>>;
 
-const STORAGE_KEY = "kips_fee_structure";
+interface FeeRow {
+  id?: number;
+  classId: number;
+  monthly:   number;
+  admission: number;
+  exam:      number;
+  annual:    number;
+  transport: number;
+}
+type FeesMap = Record<number, FeeRow>;
 
-function loadFees(): FeesMap {
+// ─── Auth helpers ─────────────────────────────────────────────────────────────
+function getToken(): string {
+  return localStorage.getItem("token") ?? localStorage.getItem("kips_token") ?? "";
+}
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token
+    ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
+    : { "Content-Type": "application/json" };
+}
+
+function getUserRole(): string {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const token = getToken();
+    if (!token) return "";
+    const payload = JSON.parse(atob(token.split(".")[1]!));
+    return payload.role ?? "";
   } catch {
-    return {};
+    return "";
   }
 }
 
-function saveFees(map: FeesMap) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+// ─── Field mapping: frontend ↔ backend ───────────────────────────────────────
+function toBackend(fees: Omit<FeeRow, "id">) {
+  return {
+    classId:      fees.classId,
+    monthlyFee:   fees.monthly,
+    admissionFee: fees.admission,
+    examFee:      fees.exam,
+    libraryFee:   fees.annual,
+    transportFee: fees.transport,
+  };
 }
 
-function calcAnnual(fees: Partial<Record<FeeKey, number>>) {
-  return (
-    (fees.monthly   ?? 0) * 12 +
-    (fees.admission ?? 0)      +
-    (fees.exam      ?? 0) * 2  +
-    (fees.annual    ?? 0)      +
-    (fees.transport ?? 0) * 12
-  );
+function fromBackend(row: Record<string, unknown>): FeeRow {
+  return {
+    id:        Number(row.id),
+    classId:   Number(row.classId),
+    monthly:   Number(row.monthlyFee   ?? 0),
+    admission: Number(row.admissionFee ?? 0),
+    exam:      Number(row.examFee      ?? 0),
+    annual:    Number(row.libraryFee   ?? 0),
+    transport: Number(row.transportFee ?? 0),
+  };
 }
 
-// ─── Edit Dialog ──────────────────────────────────────────────────────────────
+// ─── Edit/Add Dialog ──────────────────────────────────────────────────────────
 function EditDialog({
   open,
   className,
@@ -75,9 +108,10 @@ function EditDialog({
   grade:     string;
   initial:   Partial<Record<FeeKey, number>>;
   onClose:   () => void;
-  onSave:    (fees: Partial<Record<FeeKey, number>>) => void;
+  onSave:    (fees: Partial<Record<FeeKey, number>>) => Promise<void>;
 }) {
-  const [draft, setDraft] = useState<Partial<Record<FeeKey, string>>>({});
+  const [draft,  setDraft]  = useState<Partial<Record<FeeKey, string>>>({});
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -89,13 +123,15 @@ function EditDialog({
     }
   }, [open]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const out: Partial<Record<FeeKey, number>> = {};
     FEE_TYPES.forEach(ft => {
       const v = Number(draft[ft.key] ?? 0);
-      if (v > 0) out[ft.key] = v;
+      out[ft.key] = v > 0 ? v : 0;
     });
-    onSave(out);
+    setSaving(true);
+    await onSave(out);
+    setSaving(false);
   };
 
   return (
@@ -135,9 +171,7 @@ function EditDialog({
                     className="pl-12 text-right font-bold"
                     placeholder="0"
                     value={draft[ft.key] ?? ""}
-                    onChange={e =>
-                      setDraft(p => ({ ...p, [ft.key]: e.target.value }))
-                    }
+                    onChange={e => setDraft(p => ({ ...p, [ft.key]: e.target.value }))}
                   />
                 </div>
               </div>
@@ -145,22 +179,54 @@ function EditDialog({
           })}
         </div>
 
-        <div
-          className="text-xs rounded-lg p-3 border mt-1"
-          style={{ background: "#f8faff", borderColor: "#e0e7ff", color: "#6b7280" }}
-        >
-          <strong style={{ color: NAVY }}>Annual =</strong>{" "}
-          (Monthly×12) + Admission + (Exam×2) + Annual + (Transport×12)
-        </div>
-
         <div className="flex justify-end gap-2 pt-2 border-t">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
           <Button
             onClick={handleSave}
+            disabled={saving}
             style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}
             className="text-white hover:opacity-90"
           >
-            <Save className="w-4 h-4 mr-2" /> Save
+            <Save className="w-4 h-4 mr-2" />
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Delete Confirm Dialog ────────────────────────────────────────────────────
+function DeleteDialog({
+  open,
+  className,
+  onClose,
+  onConfirm,
+}: {
+  open:      boolean;
+  className: string;
+  onClose:   () => void;
+  onConfirm: () => Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle style={{ color: "#dc2626" }}>Fee Structure Delete Karein?</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-gray-600 py-2">
+          <strong>{className}</strong> ki fee structure database se hata di jayegi.
+        </p>
+        <div className="flex justify-end gap-2 pt-2 border-t">
+          <Button variant="outline" onClick={onClose} disabled={deleting}>Cancel</Button>
+          <Button
+            variant="destructive"
+            disabled={deleting}
+            onClick={async () => { setDeleting(true); await onConfirm(); setDeleting(false); }}
+          >
+            <Trash2 className="w-4 h-4 mr-2" />
+            {deleting ? "Deleting..." : "Delete"}
           </Button>
         </div>
       </DialogContent>
@@ -171,14 +237,46 @@ function EditDialog({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FeeStructure() {
   const { toast } = useToast();
-  const { data: classes, isLoading } = useListClasses();
+  const { data: classes, isLoading: classesLoading } = useListClasses();
 
-  const [feesMap, setFeesMap] = useState<FeesMap>(loadFees);
+  const [feesMap,       setFeesMap]       = useState<FeesMap>({});
+  const [loadingFees,   setLoadingFees]   = useState(true);
+
   const [editClassId,   setEditClassId]   = useState<number | null>(null);
   const [editClassName, setEditClassName] = useState("");
   const [editGrade,     setEditGrade]     = useState("");
   const [editOpen,      setEditOpen]      = useState(false);
 
+  const [deleteClassId,   setDeleteClassId]   = useState<number | null>(null);
+  const [deleteClassName, setDeleteClassName] = useState("");
+  const [deleteOpen,      setDeleteOpen]      = useState(false);
+
+  const isAdmin = getUserRole() === "admin";
+
+  // ── Database se load ─────────────────────────────────────────────────────
+  const loadFromDb = useCallback(async () => {
+    try {
+      setLoadingFees(true);
+      const res = await fetch("/api/fee-structures", { headers: authHeaders() });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const rows: Record<string, unknown>[] = await res.json();
+      const map: FeesMap = {};
+      for (const row of rows) {
+        const parsed = fromBackend(row);
+        map[parsed.classId] = parsed;
+      }
+      setFeesMap(map);
+    } catch (err) {
+      console.error("Fee load error:", err);
+      toast({ title: "Load error", description: "Fee structures load nahi hue.", variant: "destructive" });
+    } finally {
+      setLoadingFees(false);
+    }
+  }, []);
+
+  useEffect(() => { loadFromDb(); }, [loadFromDb]);
+
+  // ── Edit open ────────────────────────────────────────────────────────────
   const handleEdit = (classId: number, className: string, grade: string) => {
     setEditClassId(classId);
     setEditClassName(className);
@@ -186,27 +284,73 @@ export default function FeeStructure() {
     setEditOpen(true);
   };
 
-  const handleSave = (fees: Partial<Record<FeeKey, number>>) => {
+  // ── Save (add or update) ─────────────────────────────────────────────────
+  const handleSave = async (fees: Partial<Record<FeeKey, number>>) => {
     if (!editClassId) return;
-    const updated = { ...feesMap, [editClassId]: fees };
-    setFeesMap(updated);
-    saveFees(updated);
-    toast({
-      title: "Fees saved!",
-      description: `Fee structure saved for ${editClassName}.`,
-    });
-    setEditOpen(false);
-    setEditClassId(null);
+    try {
+      const body = toBackend({
+        classId:   editClassId,
+        monthly:   fees.monthly   ?? 0,
+        admission: fees.admission ?? 0,
+        exam:      fees.exam      ?? 0,
+        annual:    fees.annual    ?? 0,
+        transport: fees.transport ?? 0,
+      });
+      const res = await fetch("/api/fee-structures", {
+        method:  "POST",
+        headers: authHeaders(),
+        body:    JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as any).error ?? `HTTP ${res.status}`);
+      }
+      const saved: Record<string, unknown> = await res.json();
+      setFeesMap(prev => ({ ...prev, [editClassId]: fromBackend(saved) }));
+      toast({ title: "Saved!", description: `${editClassName} ki fees database mein save ho gayin.` });
+      setEditOpen(false);
+      setEditClassId(null);
+    } catch (err) {
+      toast({ title: "Save failed", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
+    }
   };
 
-  const configuredCount = Object.keys(feesMap).filter(
-    id => Object.keys(feesMap[Number(id)] ?? {}).length > 0
-  ).length;
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const handleDeleteOpen = (classId: number, className: string) => {
+    setDeleteClassId(classId);
+    setDeleteClassName(className);
+    setDeleteOpen(true);
+  };
 
-  const avgMonthly = (() => {
-    const vals = Object.values(feesMap)
-      .map(f => f?.monthly ?? 0)
-      .filter(v => v > 0);
+  const handleDeleteConfirm = async () => {
+    if (!deleteClassId) return;
+    const existing = feesMap[deleteClassId];
+    if (!existing?.id) {
+      // No DB record yet — just clear local state
+      setFeesMap(prev => { const n = { ...prev }; delete n[deleteClassId]; return n; });
+      setDeleteOpen(false);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/fee-structures/${existing.id}`, {
+        method:  "DELETE",
+        headers: authHeaders(),
+      });
+      if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      setFeesMap(prev => { const n = { ...prev }; delete n[deleteClassId]; return n; });
+      toast({ title: "Deleted", description: `${deleteClassName} ki fee structure hata di gayi.` });
+    } catch (err) {
+      toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
+    } finally {
+      setDeleteOpen(false);
+      setDeleteClassId(null);
+    }
+  };
+
+  const isLoading       = classesLoading || loadingFees;
+  const configuredCount = Object.values(feesMap).filter(f => f.monthly > 0).length;
+  const avgMonthly      = (() => {
+    const vals = Object.values(feesMap).map(f => f.monthly).filter(v => v > 0);
     return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : 0;
   })();
 
@@ -224,7 +368,7 @@ export default function FeeStructure() {
           </div>
           <div>
             <h1 className="text-2xl font-bold" style={{ color: NAVY }}>Fee Structure</h1>
-            <p className="text-gray-500 text-sm">Set fees for each class here</p>
+            <p className="text-gray-500 text-sm">Har class ki monthly fees yahan set karein</p>
           </div>
         </div>
         <Button variant="outline" onClick={() => window.print()} className="no-print">
@@ -235,10 +379,10 @@ export default function FeeStructure() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Total Classes",   value: classes?.length ?? 0,             bg: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` },
-          { label: "Configured",      value: `${configuredCount}/${classes?.length ?? 0}`, bg: "linear-gradient(135deg,#10b981,#059669)" },
-          { label: "Avg Monthly",     value: avgMonthly ? `PKR ${avgMonthly.toLocaleString()}` : "—", bg: `linear-gradient(135deg,${ORANGE},#c96a10)` },
-          { label: "Fee Types",       value: FEE_TYPES.length,                 bg: "linear-gradient(135deg,#8b5cf6,#6d28d9)" },
+          { label: "Total Classes", value: classes?.length ?? 0,                                    bg: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` },
+          { label: "Configured",    value: `${configuredCount}/${classes?.length ?? 0}`,            bg: "linear-gradient(135deg,#10b981,#059669)"   },
+          { label: "Avg Monthly",   value: avgMonthly ? `PKR ${avgMonthly.toLocaleString()}` : "—", bg: `linear-gradient(135deg,${ORANGE},#c96a10)` },
+          { label: "Fee Types",     value: FEE_TYPES.length,                                        bg: "linear-gradient(135deg,#8b5cf6,#6d28d9)"   },
         ].map(c => (
           <Card key={c.label} className="border-0 shadow-sm overflow-hidden">
             <CardContent className="p-0">
@@ -269,7 +413,7 @@ export default function FeeStructure() {
         <CardHeader className="pb-2 border-b">
           <CardTitle className="text-base flex items-center gap-2" style={{ color: NAVY }}>
             <DollarSign className="w-4 h-4" style={{ color: ORANGE }} />
-            Class-wise Fee Structure
+            Class-wise Fee Structure (Monthly)
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -295,15 +439,13 @@ export default function FeeStructure() {
                         </th>
                       );
                     })}
-                    <th className="text-right py-3 px-3 font-semibold" style={{ color: NAVY }}>Annual</th>
-                    <th className="py-3 px-4" />
+                    {isAdmin && <th className="py-3 px-4 text-center font-semibold" style={{ color: NAVY }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {(classes ?? []).map((cls, idx) => {
-                    const fees       = feesMap[cls.id] ?? {};
-                    const configured = Object.keys(fees).length > 0;
-                    const annual     = calcAnnual(fees);
+                    const fees       = feesMap[cls.id];
+                    const configured = fees && fees.monthly > 0;
 
                     return (
                       <tr
@@ -311,6 +453,7 @@ export default function FeeStructure() {
                         className="border-b hover:bg-indigo-50/30 transition-colors"
                         style={{ background: idx % 2 === 0 ? "#fff" : "#fafbff" }}
                       >
+                        {/* Class name */}
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2.5">
                             <div
@@ -329,11 +472,12 @@ export default function FeeStructure() {
                           </div>
                         </td>
 
+                        {/* Fee columns — per month values */}
                         {FEE_TYPES.map(ft => (
                           <td key={ft.key} className="py-3 px-3 text-right">
-                            {fees[ft.key] ? (
+                            {fees && (fees[ft.key as FeeKey] ?? 0) > 0 ? (
                               <span className="font-semibold text-gray-800">
-                                {Number(fees[ft.key]).toLocaleString()}
+                                {Number(fees[ft.key as FeeKey]).toLocaleString()}
                               </span>
                             ) : (
                               <span className="text-gray-200">—</span>
@@ -341,31 +485,34 @@ export default function FeeStructure() {
                           </td>
                         ))}
 
-                        <td className="py-3 px-3 text-right">
-                          {annual > 0 ? (
-                            <span
-                              className="inline-block px-2 py-0.5 rounded-full text-xs font-bold"
-                              style={{ background: "#f0fdf4", color: "#16a34a", border: "1px solid #bbf7d0" }}
-                            >
-                              {annual.toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-gray-200">—</span>
-                          )}
-                        </td>
-
-                        <td className="py-3 px-4 text-right">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-8 text-xs font-semibold"
-                            style={{ borderColor: NAVY + "33", color: NAVY }}
-                            onClick={() => handleEdit(cls.id, cls.name, cls.grade ?? "")}
-                          >
-                            <Pencil className="w-3 h-3 mr-1" />
-                            {configured ? "Edit" : "Set Fees"}
-                          </Button>
-                        </td>
+                        {/* Admin actions */}
+                        {isAdmin && (
+                          <td className="py-3 px-4">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs font-semibold"
+                                style={{ borderColor: NAVY + "33", color: NAVY }}
+                                onClick={() => handleEdit(cls.id, cls.name, cls.grade ?? "")}
+                              >
+                                <Pencil className="w-3 h-3 mr-1" />
+                                {configured ? "Edit" : "Add"}
+                              </Button>
+                              {configured && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50"
+                                  onClick={() => handleDeleteOpen(cls.id, cls.name)}
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                  Delete
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -376,16 +523,7 @@ export default function FeeStructure() {
         </CardContent>
       </Card>
 
-      {/* Note */}
-      <p
-        className="text-xs rounded-xl p-3 border"
-        style={{ background: "#f8faff", borderColor: "#e0e7ff", color: "#6b7280" }}
-      >
-        <strong style={{ color: NAVY }}>Annual Total =</strong>{" "}
-        (Monthly × 12) + Admission + (Exam × 2) + Annual Charges + (Transport × 12)
-      </p>
-
-      {/* Dialog */}
+      {/* Edit Dialog */}
       {editClassId !== null && (
         <EditDialog
           open={editOpen}
@@ -396,6 +534,14 @@ export default function FeeStructure() {
           onSave={handleSave}
         />
       )}
+
+      {/* Delete Dialog */}
+      <DeleteDialog
+        open={deleteOpen}
+        className={deleteClassName}
+        onClose={() => { setDeleteOpen(false); setDeleteClassId(null); }}
+        onConfirm={handleDeleteConfirm}
+      />
     </div>
   );
 }
