@@ -2,13 +2,15 @@ import { useState } from "react";
 import { Sidebar } from "./sidebar";
 import { ScrollArea } from "../ui/scroll-area";
 import { Menu, X } from "lucide-react";
+import { useSchoolInfo } from "@/lib/school-info";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const today = new Date().toLocaleDateString("en-PK", { dateStyle: "long" });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const schoolInfo = useSchoolInfo();
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
+    <div className="flex h-[100dvh] bg-gray-50 overflow-hidden">
       {/* Sidebar — desktop: always visible; mobile: slide-in drawer */}
       <div
         className={`fixed md:static inset-y-0 left-0 z-40 transform transition-transform duration-200 md:transform-none ${
@@ -36,8 +38,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           >
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
-          <img src="/kips-logo.jpeg" alt="KIPS" className="w-8 h-8 rounded-full object-cover border" />
-          <span className="font-bold text-sm" style={{ color: "#1a2a5e" }}>KIPS School Hassari</span>
+          <img src={schoolInfo.logoUrl} alt="KIPS" className="w-8 h-8 rounded-full object-cover border" onError={e => { (e.target as HTMLImageElement).src = "/kips-logo.jpeg"; }} />
+          <span className="font-bold text-sm" style={{ color: "#1a2a5e" }}>{schoolInfo.name}</span>
         </div>
 
         <ScrollArea className="flex-1 print:overflow-visible">
