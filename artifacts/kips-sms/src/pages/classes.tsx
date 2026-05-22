@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useListClasses, useCreateClass } from "@workspace/api-client-react";
+import { useListClasses, useCreateClass, getListClassesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -68,7 +68,7 @@ export default function Classes() {
   const onCreateSubmit = (values: ClassFormValues) => {
     createMutation.mutate({ data: values }, {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ["listClasses"] });
+        queryClient.invalidateQueries({ queryKey: getListClassesQueryKey() });
         toast({ title: "Class created successfully" });
         setCreateOpen(false);
         createForm.reset();
@@ -100,7 +100,7 @@ export default function Classes() {
         body:    JSON.stringify(values),
       });
       if (!res.ok) throw new Error("Failed");
-      queryClient.invalidateQueries({ queryKey: ["listClasses"] });
+      queryClient.invalidateQueries({ queryKey: getListClassesQueryKey() });
       toast({ title: "Class updated successfully" });
       setEditOpen(false);
       setEditTarget(null);
@@ -127,7 +127,7 @@ export default function Classes() {
         headers: authHeader(),
       });
       if (!res.ok) throw new Error("Failed");
-      queryClient.invalidateQueries({ queryKey: ["listClasses"] });
+      queryClient.invalidateQueries({ queryKey: getListClassesQueryKey() });
       toast({ title: `"${deleteTarget.name}" deleted` });
       setDeleteOpen(false);
       setDeleteTarget(null);
