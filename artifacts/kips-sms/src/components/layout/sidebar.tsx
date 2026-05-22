@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
@@ -52,6 +52,7 @@ const getNavigation = (role?: string) => {
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
+  const searchStr = useSearch(); // wouter v3 — reactive query string
   const { user, logout } = useAuthStore();
   const navigation = getNavigation(user?.role);
   const [studentsExpanded, setStudentsExpanded] = useState(
@@ -151,7 +152,7 @@ export function Sidebar() {
                               ? cls.sections.split(",").map(s => s.trim()).filter(Boolean)
                               : [];
                             const classHref = `/students?classId=${cls.id}`;
-                            const isClassActive = location === "/students" && typeof window !== "undefined" && window.location.search.includes(`classId=${cls.id}`);
+                            const isClassActive = location.startsWith("/students") && searchStr.includes(`classId=${cls.id}`);
 
                             return (
                               <div key={cls.id}>
@@ -178,7 +179,7 @@ export function Sidebar() {
                                   <div className="ml-4 mt-0.5 space-y-0.5">
                                     {sections.map(sec => {
                                       const secHref = `/students?classId=${cls.id}&section=${encodeURIComponent(sec)}`;
-                                      const isSecActive = typeof window !== "undefined" && window.location.search.includes(`classId=${cls.id}`) && window.location.search.includes(`section=${encodeURIComponent(sec)}`);
+                                      const isSecActive = searchStr.includes(`classId=${cls.id}`) && searchStr.includes(`section=${encodeURIComponent(sec)}`);
                                       return (
                                         <Link key={sec} href={secHref}>
                                           <div
