@@ -1,377 +1,90 @@
 import { useState } from "react";
-import { useListStudents, useListClasses, useCreateFee, useListFees, getListFeesQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useListStudents, useListClasses, useListFees } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ReceiptText, Printer, Save, CheckCircle2, Loader2, Trash2, Pencil } from "lucide-react";
-import { useAuthStore } from "@/lib/auth";
+import { ReceiptText, Printer, Pencil, Check } from "lucide-react";
 
-// ─── Fee Types ────────────────────────────────────────────────────────────────
-const ALL_FEE_TYPES = [
-  { key: "monthly",   label: "Monthly Tuition Fee" },
-  { key: "admission", label: "Admission Fee"        },
-  { key: "exam",      label: "Exam Fee"             },
-  { key: "annual",    label: "Annual Charges"       },
-  { key: "transport", label: "Transport Fee"        },
-] as const;
-
-type FeeKey = typeof ALL_FEE_TYPES[number]["key"];
-
-function loadFeeStructure(): Record<number, Partial<Record<FeeKey, number>>> {
-  try {
-    const raw = localStorage.getItem("kips_fee_structure");
-    return raw ? JSON.parse(raw) : {};
-  } catch { return {}; }
+interface VoucherEdit {
+  feeOverride: string;
+  fine: string;
+  discount: string;
+  note: string;
 }
 
-// ─── Direct API helper (PUT / DELETE not in generated client) ────────────────
-async function apiFetch(path: string, options?: RequestInit) {
-  const token = localStorage.getItem("kips_token");
-  const res = await fetch(path, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options?.headers,
-    },
-  });
-  if (!res.ok) throw new Error(await res.text().catch(() => "Request failed"));
-  return res.status === 204 ? null : res.json();
-}
-
-const NAVY = "#1a2a5e";
-
-// ════════════════════════════════════════════════════════════════════════════
 export default function FeeVoucher() {
   const [selectedClass, setSelectedClass] = useState<string>("");
-  const [month, setMonth]       = useState<string>(new Date().toISOString().slice(0, 7));
-  const [dueDate, setDueDate]   = useState<string>(() => {
-    const d = new Date(); d.setDate(10);
-    return d.toISOString().slice(0, 10);
+  const [month, setMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [dueDate, setDueDate] = useState<string>(() => {
+    const d = new Date(); d.setDate(10); return d.toISOString().slice(0, 10);
   });
-  const [selectedFeeTypes, setSelectedFeeTypes] = useState<Set<FeeKey>>(new Set(["monthly"]));
-  const [generated, setGenerated]   = useState(false);
-  const [saving, setSaving]         = useState(false);
-  const [savedCount, setSavedCount] = useState(0);
-  const [saveError, setSaveError]   = useState<string | null>(null);
+  const [generated, setGenerated] = useState(false);
+  const [edits, setEdits] = useState<Record<number, VoucherEdit>>({});
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<VoucherEdit>({ feeOverride: "", fine: "", discount: "", note: "" });
 
-  // Edit single voucher (fee record) state
-  const [editTarget, setEditTarget]   = useState<{ id: number; amount: number; month: string; dueDate: string; fine: number } | null>(null);
-  const [editAmount, setEditAmount]   = useState("");
-  const [editMonth, setEditMonth]     = useState("");
-  const [editDueDate, setEditDueDate] = useState("");
-  const [editFine, setEditFine]       = useState("0");
-  const [editSaving, setEditSaving]   = useState(false);
-
-  // Delete state
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleting, setDeleting]                   = useState(false);
-
-  const queryClient = useQueryClient();
-  const createFee   = useCreateFee();
-  const { user }    = useAuthStore();
-  const isAdmin     = user?.role === "admin";
-
-  const { data: classes }     = useListClasses();
+  const { data: classes } = useListClasses();
   const { data: allStudents } = useListStudents({});
-  const { data: allFees }     = useListFees({});
 
-  const feeStructure      = loadFeeStructure();
-  const classId           = Number(selectedClass);
-  const classFees         = feeStructure[classId] ?? {};
-  const classStudents     = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
+  // Fetch existing fee records for the selected month to use as base fee amounts
+  const { data: feeRecords } = useListFees(
+    month ? { month } : {}
+  );
+
+  const classStudents = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
   const selectedClassName = classes?.find(c => String(c.id) === selectedClass)?.name ?? "";
-  const availableFeeTypes = ALL_FEE_TYPES.filter(ft => (classFees[ft.key] ?? 0) > 0);
-  const hasFeeStructure   = availableFeeTypes.length > 0;
-
-  const calcTotal = () =>
-    hasFeeStructure
-      ? ALL_FEE_TYPES.reduce((s, ft) => selectedFeeTypes.has(ft.key) ? s + (classFees[ft.key] ?? 0) : s, 0)
-      : 0;
 
   const voucherDate = new Date().toLocaleDateString("en-PK", { dateStyle: "long" });
-  const monthLabel  = month ? new Date(month + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" }) : "";
+  const monthLabel = month ? new Date(month + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" }) : "";
 
-  // Fee records saved in DB for this class+month (for edit/delete)
-  const savedFeeRecords = (allFees ?? []).filter(f => {
-    const student = allStudents?.find(s => s.id === f.studentId);
-    return f.month === month && student && String(student.classId) === selectedClass;
-  });
+  const getEdit = (id: number) => edits[id] ?? { feeOverride: "", fine: "", discount: "", note: "" };
 
-  // Auto-show vouchers if already saved in DB (so re-visiting the page shows them, not "Generate")
-  const hasExistingVouchers = savedFeeRecords.length > 0;
-  const showVouchers = generated || hasExistingVouchers;
-
-  const toggleFeeType = (key: FeeKey) => {
-    setSelectedFeeTypes(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
+  // Get base fee for a student: first check feesTable record for the month, then fall back to student.feeAmount
+  const getBaseFee = (studentId: number, studentFeeAmount: number | null) => {
+    const feeRecord = feeRecords?.find(f => Number((f as unknown as Record<string, unknown>).studentId) === studentId);
+    if (feeRecord && feeRecord.amount) return Number(feeRecord.amount);
+    return Number(studentFeeAmount ?? 0);
   };
 
-  // ── Generate & Save to DB ─────────────────────────────────────────────────
-  const handleGenerate = async () => {
-    if (!selectedClass || !month) return;
-    setSaving(true); setSaveError(null); setSavedCount(0);
-    let saved = 0;
-    const errors: string[] = [];
-    for (const student of classStudents) {
-      const amount = hasFeeStructure && selectedFeeTypes.size > 0
-        ? calcTotal() : Number(student.feeAmount ?? 0);
-      if (amount <= 0) continue;
-      try {
-        await createFee.mutateAsync({ data: { studentId: student.id, amount, month, dueDate } });
-        saved++;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        if (!msg.toLowerCase().includes("duplicate") && !msg.toLowerCase().includes("already")) {
-          errors.push(`${student.name}: ${msg}`);
-        } else { saved++; }
-      }
-    }
-    setSavedCount(saved); setSaving(false); setGenerated(true);
-    queryClient.invalidateQueries({ queryKey: getListFeesQueryKey() });
-    queryClient.invalidateQueries({ queryKey: ["/api/fees/defaulters"] });
-    if (errors.length > 0) setSaveError(`${errors.length} error(s): ${errors.slice(0, 2).join("; ")}`);
+  const openEdit = (id: number, baseFee: number) => {
+    const e = getEdit(id);
+    setDraft({ feeOverride: e.feeOverride || String(baseFee), fine: e.fine, discount: e.discount, note: e.note });
+    setEditingId(id);
   };
 
-  // ── Edit single fee record ────────────────────────────────────────────────
-  const openEdit = (feeId: number, amount: number, feeMonth: string, feeDueDate: string, fine: number) => {
-    setEditTarget({ id: feeId, amount, month: feeMonth, dueDate: feeDueDate, fine });
-    setEditAmount(String(amount));
-    setEditMonth(feeMonth);
-    setEditDueDate(feeDueDate);
-    setEditFine(String(fine));
+  const saveEdit = (id: number) => {
+    setEdits(prev => ({ ...prev, [id]: { ...draft } }));
+    setEditingId(null);
   };
 
-  const handleEditSave = async () => {
-    if (!editTarget) return;
-    setEditSaving(true);
-    try {
-      await apiFetch(`/api/fees/${editTarget.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          amount:  Number(editAmount),
-          month:   editMonth,
-          dueDate: editDueDate,
-          fine:    Number(editFine),
-        }),
-      });
-      queryClient.invalidateQueries({ queryKey: getListFeesQueryKey() });
-      setEditTarget(null);
-    } catch (e: unknown) {
-      alert("Update failed: " + (e instanceof Error ? e.message : String(e)));
-    } finally { setEditSaving(false); }
+  const calcTotal = (id: number, baseFee: number) => {
+    const e = getEdit(id);
+    const fee = Number(e.feeOverride || baseFee);
+    const fine = Number(e.fine || 0);
+    const disc = Number(e.discount || 0);
+    return Math.max(0, fee + fine - disc);
   };
 
-  // ── Delete ALL vouchers for this class+month ──────────────────────────────
-  const handleDeleteAll = async () => {
-    setDeleting(true);
-    try {
-      for (const fee of savedFeeRecords) {
-        await apiFetch(`/api/fees/${fee.id}`, { method: "DELETE" });
-      }
-      queryClient.invalidateQueries({ queryKey: getListFeesQueryKey() });
-      setDeleteConfirmOpen(false);
-      setGenerated(false);
-      setSavedCount(0);
-    } catch (e: unknown) {
-      alert("Delete failed: " + (e instanceof Error ? e.message : String(e)));
-    } finally { setDeleting(false); }
-  };
-
-  // ── Print all vouchers ────────────────────────────────────────────────────
-  // Builds a self-contained HTML page (hex colors only — no Tailwind/oklch) and
-  // opens it in a new tab where the browser's native print dialog auto-opens.
-  // The user can then save as PDF or print directly.
-  const handlePrintVouchers = () => {
-    if (classStudents.length === 0) return;
-    const logoSrc = `${window.location.origin}/kips-logo.jpeg`;
-
-    // Escape any user/data text before injecting into the HTML template so a
-    // malicious student/class name cannot inject script tags.
-    const esc = (v: unknown) => String(v ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-
-    const vouchersHtml = classStudents.map((student, idx) => {
-      const feeRows: { label: string; amount: number }[] = [];
-      if (hasFeeStructure && selectedFeeTypes.size > 0) {
-        ALL_FEE_TYPES.forEach(ft => {
-          if (selectedFeeTypes.has(ft.key) && (classFees[ft.key] ?? 0) > 0)
-            feeRows.push({ label: ft.label, amount: classFees[ft.key]! });
-        });
-      } else {
-        feeRows.push({ label: "Monthly Tuition Fee", amount: Number(student.feeAmount ?? 0) });
-      }
-      const total = feeRows.reduce((s, r) => s + r.amount, 0);
-      const voucherNo = `${month.replace("-", "")}-${String(student.admissionNumber).split("-").pop()}-${String(idx + 1).padStart(3, "0")}`;
-
-      const rowsHtml = feeRows.map((row, i) => `
-        <tr style="background:${i % 2 === 0 ? "#ffffff" : "#f9fafb"};">
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;">${esc(row.label)}</td>
-          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${row.amount.toLocaleString()}</td>
-        </tr>`).join("");
-
-      return `
-        <div class="voucher">
-          <div class="v-header">
-            <div class="v-brand">
-              <img src="${esc(logoSrc)}" alt="KIPS" class="v-logo" crossorigin="anonymous" />
-              <div>
-                <h2 class="v-title">KIPS School Hassari</h2>
-                <p class="v-sub">Bright Future | School Fee Voucher</p>
-                <p class="v-date">Date: ${esc(voucherDate)}</p>
-              </div>
-            </div>
-            <div class="v-no">
-              <p class="v-no-label">Voucher No.</p>
-              <p class="v-no-val">${esc(voucherNo)}</p>
-            </div>
-          </div>
-
-          <div class="v-info">
-            <div>
-              <div class="v-row"><span class="v-key">Student Name:</span><span class="v-val v-strong">${esc(student.name)}</span></div>
-              <div class="v-row"><span class="v-key">Admission No.:</span><span class="v-val v-mono">${esc(student.admissionNumber)}</span></div>
-              <div class="v-row"><span class="v-key">Father Name:</span><span class="v-val">${esc(student.fatherName ?? "—")}</span></div>
-            </div>
-            <div>
-              <div class="v-row"><span class="v-key">Class:</span><span class="v-val v-strong">${esc(selectedClassName)}</span></div>
-              <div class="v-row"><span class="v-key">Section:</span><span class="v-val">${esc(student.section ?? "—")}</span></div>
-              <div class="v-row"><span class="v-key">Month:</span><span class="v-val v-strong">${esc(monthLabel)}</span></div>
-            </div>
-          </div>
-
-          <table class="v-table">
-            <thead>
-              <tr><th style="text-align:left;">Description</th><th style="text-align:right;">Amount (PKR)</th></tr>
-            </thead>
-            <tbody>
-              ${rowsHtml}
-              <tr style="background:#f0f4ff;">
-                <td style="padding:10px 12px;font-weight:700;color:${NAVY};">Total Due</td>
-                <td style="padding:10px 12px;text-align:right;font-weight:700;color:#dc2626;font-size:15px;">${total.toLocaleString()}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <div class="v-footer">
-            <span>Due Date: <strong>${esc(dueDate)}</strong></span>
-            <span>Pay before due date to avoid fine</span>
-            <span>Cashier Signature: ________________</span>
-          </div>
-        </div>`;
-    }).join("");
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>Fee Vouchers — ${esc(selectedClassName)} — ${esc(monthLabel)}</title>
-<style>
-  @page { size: A4; margin: 10mm; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: #f3f4f6; color: #111827; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 13px; }
-  .wrap { max-width: 800px; margin: 0 auto; padding: 16px; }
-  .voucher { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 20px; page-break-inside: avoid; }
-  .v-header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 1px solid #e5e7eb; padding-bottom: 14px; margin-bottom: 14px; }
-  .v-brand { display: flex; align-items: center; gap: 12px; }
-  .v-logo { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 2px solid #e07b1a; }
-  .v-title { margin: 0; font-size: 18px; font-weight: 700; color: ${NAVY}; }
-  .v-sub { margin: 2px 0 0; font-size: 11px; color: #6b7280; }
-  .v-date { margin: 2px 0 0; font-size: 11px; color: #9ca3af; }
-  .v-no { text-align: right; }
-  .v-no-label { margin: 0; font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em; }
-  .v-no-val { margin: 2px 0 0; font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: #1f2937; }
-  .v-info { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
-  .v-row { display: flex; gap: 8px; margin-bottom: 6px; font-size: 13px; }
-  .v-key { color: #6b7280; width: 112px; flex-shrink: 0; }
-  .v-val { color: #1f2937; }
-  .v-strong { font-weight: 600; color: #111827; }
-  .v-mono { font-family: ui-monospace, Menlo, monospace; color: #7e22ce; font-weight: 500; }
-  .v-table { width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; margin-bottom: 14px; font-size: 13px; }
-  .v-table thead { background: ${NAVY}; color: #ffffff; }
-  .v-table th { padding: 8px 12px; }
-  .v-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e5e7eb; padding-top: 10px; font-size: 11px; color: #6b7280; }
-  .v-footer strong { color: #374151; }
-  .toolbar { position: sticky; top: 0; background: ${NAVY}; color: #fff; padding: 10px 16px; display: flex; gap: 10px; justify-content: flex-end; align-items: center; z-index: 100; }
-  .toolbar button { background: #fff; color: ${NAVY}; border: 0; padding: 6px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 13px; }
-  .toolbar button:hover { background: #f0f4ff; }
-  @media print {
-    .toolbar { display: none; }
-    body { background: #fff; }
-    .wrap { padding: 0; max-width: none; }
-    .voucher { border: 0; border-radius: 0; border-bottom: 1px dashed #d1d5db; margin-bottom: 0; }
-  }
-</style>
-</head>
-<body>
-  <div class="toolbar">
-    <span style="margin-right:auto;font-weight:600;">${classStudents.length} Vouchers — ${esc(selectedClassName)} — ${esc(monthLabel)}</span>
-    <button onclick="window.print()">Print / Save as PDF</button>
-    <button onclick="window.close()">Close</button>
-  </div>
-  <div class="wrap">${vouchersHtml}</div>
-  <script>
-    window.addEventListener("load", function () {
-      // Wait for all images, then auto-open print dialog
-      var imgs = Array.from(document.images);
-      var pending = imgs.filter(function (i) { return !i.complete; });
-      if (pending.length === 0) { setTimeout(function () { window.print(); }, 300); return; }
-      var done = 0;
-      pending.forEach(function (img) {
-        var fin = function () { if (++done === pending.length) setTimeout(function () { window.print(); }, 300); };
-        img.addEventListener("load", fin);
-        img.addEventListener("error", fin);
-      });
-      setTimeout(function () { window.print(); }, 2500); // safety timeout
-    });
-  </script>
-</body>
-</html>`;
-
-    const w = window.open("", "_blank");
-    if (!w) {
-      alert("Popup blocked — please allow popups for this site to print vouchers.");
-      return;
-    }
-    w.document.open();
-    w.document.write(html);
-    w.document.close();
-  };
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-
-      {/* Header */}
       <div className="flex items-center justify-between no-print">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ReceiptText className="w-6 h-6 text-teal-600" /> Fee Voucher — By Class
           </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Select a class — fees will be saved to the database and vouchers will be ready to print
-          </p>
+          <p className="text-gray-500 text-sm mt-1">Generate and edit fee vouchers before printing</p>
         </div>
       </div>
 
       {/* Controls */}
       <Card className="no-print">
-        <CardContent className="p-5 space-y-4">
+        <CardContent className="p-5">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="text-sm font-medium text-gray-700 block mb-1">Select Class</label>
-              <Select value={selectedClass} onValueChange={v => { setSelectedClass(v); setGenerated(false); setSavedCount(0); setSaveError(null); }}>
+              <Select value={selectedClass} onValueChange={v => { setSelectedClass(v); setGenerated(false); setEdits({}); }}>
                 <SelectTrigger><SelectValue placeholder="Choose class..." /></SelectTrigger>
                 <SelectContent>
                   {classes?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
@@ -387,134 +100,139 @@ export default function FeeVoucher() {
               <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </div>
           </div>
-
-          {/* Fee Type Checkboxes */}
-          {selectedClass && (
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">Which fees to include in the voucher:</p>
-              {hasFeeStructure ? (
-                <div className="flex flex-wrap gap-4">
-                  {availableFeeTypes.map(ft => (
-                    <label key={ft.key} className="flex items-center gap-2 cursor-pointer select-none">
-                      <Checkbox checked={selectedFeeTypes.has(ft.key)} onCheckedChange={() => toggleFeeType(ft.key)} />
-                      <span className="text-sm text-gray-700">
-                        {ft.label}
-                        <span className="ml-1 text-xs font-semibold text-indigo-600">
-                          PKR {Number(classFees[ft.key] ?? 0).toLocaleString()}
-                        </span>
-                      </span>
-                    </label>
-                  ))}
-                  {selectedFeeTypes.size > 0 && (
-                    <span className="ml-auto text-sm font-bold text-gray-800">
-                      Total: PKR {calcTotal().toLocaleString()}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2">
-                  ⚠️ No fee structure set for this class — please set fees on the <strong>Fee Structure</strong> page first.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="mt-4 flex gap-2 items-center flex-wrap">
             <Button
-              disabled={!selectedClass || !month || saving || classStudents.length === 0 || hasExistingVouchers}
-              onClick={handleGenerate}
-              style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9a)`, color: "#fff" }}
+              disabled={!selectedClass || !month}
+              onClick={() => setGenerated(true)}
+              style={{ background: "linear-gradient(135deg, #1a2a5e, #2d4a9a)", color: "#fff" }}
             >
-              {saving
-                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving... ({savedCount}/{classStudents.length})</>
-                : hasExistingVouchers
-                  ? <><CheckCircle2 className="w-4 h-4 mr-2" /> Vouchers Already Saved ({savedFeeRecords.length})</>
-                  : <><Save className="w-4 h-4 mr-2" /> Save & Generate ({classStudents.length} students)</>}
+              Generate Vouchers ({classStudents.length} students)
             </Button>
-
-            {showVouchers && classStudents.length > 0 && (
-              <Button variant="outline" onClick={handlePrintVouchers}>
-                <Printer className="w-4 h-4 mr-2" /> Print All Vouchers
+            {generated && classStudents.length > 0 && (
+              <Button variant="outline" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 mr-2" /> Print All
               </Button>
             )}
-
-            {/* Admin: Delete all vouchers for this class+month */}
-            {isAdmin && selectedClass && month && savedFeeRecords.length > 0 && (
-              <Button
-                variant="outline"
-                className="text-red-600 border-red-200 hover:bg-red-50 ml-auto"
-                onClick={() => setDeleteConfirmOpen(true)}
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete {savedFeeRecords.length} Vouchers ({monthLabel})
-              </Button>
+            {month && feeRecords && feeRecords.length > 0 && (
+              <span className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1">
+                {feeRecords.length} fee record(s) loaded for {monthLabel}
+              </span>
+            )}
+            {month && feeRecords && feeRecords.length === 0 && (
+              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+                No fee records for {monthLabel} — using per-student fee amounts
+              </span>
             )}
           </div>
-
-          {/* Success / Error */}
-          {generated && savedCount > 0 && !hasExistingVouchers && (
-            <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0" />
-              <span><strong>{savedCount}</strong> students' fees saved to database.</span>
-            </div>
-          )}
-          {saveError && (
-            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">⚠️ {saveError}</div>
-          )}
         </CardContent>
       </Card>
 
-      {showVouchers && classStudents.length === 0 && (
+      {generated && classStudents.length === 0 && (
         <p className="text-center text-gray-500 py-12">No active students found in this class.</p>
       )}
 
-      {/* Vouchers */}
-      {showVouchers && classStudents.length > 0 && (
-        <div id="vouchers">
-          {classStudents.map((student, idx) => {
-            // Find saved DB record for this student+month (for edit button)
-            const savedRecord = savedFeeRecords.find(f => f.studentId === student.id);
+      {/* Edit Dialog */}
+      <Dialog open={editingId !== null} onOpenChange={open => { if (!open) setEditingId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Edit Voucher Amounts</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Fee Amount (PKR)</label>
+              <Input
+                type="number"
+                placeholder="Monthly fee"
+                value={draft.feeOverride}
+                onChange={e => setDraft(d => ({ ...d, feeOverride: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Fine / Late Charges (PKR)</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={draft.fine}
+                onChange={e => setDraft(d => ({ ...d, fine: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Discount / Concession (PKR)</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={draft.discount}
+                onChange={e => setDraft(d => ({ ...d, discount: e.target.value }))}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Note (optional)</label>
+              <Input
+                placeholder="e.g. Sibling discount"
+                value={draft.note}
+                onChange={e => setDraft(d => ({ ...d, note: e.target.value }))}
+              />
+            </div>
+            <div className="flex justify-between items-center bg-gray-50 rounded-lg px-4 py-3">
+              <span className="text-sm font-medium text-gray-700">Total Due:</span>
+              <span className="text-lg font-bold text-gray-900">
+                PKR {Math.max(0, (Number(draft.feeOverride) || 0) + (Number(draft.fine) || 0) - (Number(draft.discount) || 0)).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+              <Button onClick={() => editingId !== null && saveEdit(editingId)}>
+                <Check className="w-4 h-4 mr-2" /> Save
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-            const feeRows: { label: string; amount: number }[] = [];
-            if (hasFeeStructure && selectedFeeTypes.size > 0) {
-              ALL_FEE_TYPES.forEach(ft => {
-                if (selectedFeeTypes.has(ft.key) && (classFees[ft.key] ?? 0) > 0)
-                  feeRows.push({ label: ft.label, amount: classFees[ft.key]! });
-              });
-            } else {
-              feeRows.push({ label: "Monthly Tuition Fee", amount: Number(student.feeAmount ?? 0) });
-            }
-            const total = feeRows.reduce((s, r) => s + r.amount, 0);
+      {/* Vouchers */}
+      {generated && classStudents.length > 0 && (
+        <div className="space-y-0" id="vouchers">
+          {classStudents.map((student, idx) => {
+            const baseFee = getBaseFee(student.id, student.feeAmount ?? null);
+            const e = getEdit(student.id);
+            const fee = Number(e.feeOverride || baseFee);
+            const fine = Number(e.fine || 0);
+            const disc = Number(e.discount || 0);
+            const total = calcTotal(student.id, baseFee);
+            const hasEdits = e.feeOverride || e.fine || e.discount || e.note;
+
+            // Check if fee came from fee records
+            const hasFeeRecord = feeRecords?.some(f => Number((f as unknown as Record<string, unknown>).studentId) === student.id);
 
             return (
-              <div key={student.id} className="border rounded-xl p-6 mb-6 bg-white print:rounded-none print:border-0 print:border-b print:mb-0"
-                style={{ pageBreakInside: "avoid" }}>
+              <div
+                key={student.id}
+                className="border rounded-xl p-6 mb-6 bg-white relative print:rounded-none print:border-0 print:border-b print:mb-0"
+                style={{ pageBreakInside: "avoid" }}
+              >
+                {/* Edit button — hidden in print */}
+                <button
+                  className="absolute top-4 right-4 no-print flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg px-2.5 py-1.5 transition-colors font-medium border border-blue-200"
+                  onClick={() => openEdit(student.id, baseFee)}
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  {hasEdits ? "Edited" : "Edit"}
+                </button>
 
-                {/* Admin action bar (hidden on print) */}
-                {isAdmin && savedRecord && (
-                  <div className="flex items-center justify-between mb-3 pb-3 border-b no-print">
-                    <span className="text-xs text-gray-400 font-mono">Fee ID: #{savedRecord.id} — Status: <span className={savedRecord.status === "paid" ? "text-emerald-600 font-semibold" : "text-red-500 font-semibold"}>{savedRecord.status}</span></span>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="h-7 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 gap-1"
-                        onClick={() => openEdit(savedRecord.id, savedRecord.amount, savedRecord.month, savedRecord.dueDate, savedRecord.fine ?? 0)}>
-                        <Pencil className="w-3 h-3" /> Edit
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Voucher Header */}
                 <div className="flex items-start justify-between border-b pb-4 mb-4">
                   <div className="flex items-center gap-3">
                     <img src="/kips-logo.jpeg" alt="KIPS" className="w-14 h-14 rounded-full object-cover border-2" style={{ borderColor: "#e07b1a" }} />
                     <div>
-                      <h2 className="font-bold text-lg" style={{ color: NAVY }}>KIPS School Hassari</h2>
+                      <h2 className="font-bold text-lg" style={{ color: "#1a2a5e" }}>KIPS School Hassari</h2>
                       <p className="text-xs text-gray-500">Bright Future | School Fee Voucher</p>
                       <p className="text-xs text-gray-400">Date: {voucherDate}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="text-right pr-16 no-print sm:pr-20">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Voucher No.</p>
+                    <p className="font-mono font-bold text-gray-800">
+                      {month.replace("-", "")}-{String(student.admissionNumber).split("-").pop()}-{String(idx + 1).padStart(3, "0")}
+                    </p>
+                  </div>
+                  <div className="text-right hidden print:block">
                     <p className="text-xs text-gray-500 uppercase tracking-wide">Voucher No.</p>
                     <p className="font-mono font-bold text-gray-800">
                       {month.replace("-", "")}-{String(student.admissionNumber).split("-").pop()}-{String(idx + 1).padStart(3, "0")}
@@ -522,7 +240,6 @@ export default function FeeVoucher() {
                   </div>
                 </div>
 
-                {/* Student Info */}
                 <div className="grid grid-cols-2 gap-4 text-sm mb-5">
                   <div className="space-y-1.5">
                     <div className="flex gap-2"><span className="text-gray-500 w-28 shrink-0">Student Name:</span><span className="font-semibold text-gray-900">{student.name}</span></div>
@@ -536,29 +253,47 @@ export default function FeeVoucher() {
                   </div>
                 </div>
 
-                {/* Fee Table */}
                 <table className="w-full text-sm border rounded-lg overflow-hidden mb-4">
-                  <thead style={{ background: NAVY, color: "#fff" }}>
+                  <thead style={{ background: "#1a2a5e", color: "#fff" }}>
                     <tr>
                       <th className="text-left py-2 px-3">Description</th>
                       <th className="text-right py-2 px-3">Amount (PKR)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {feeRows.map((row, i) => (
-                      <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                        <td className="py-2 px-3 border-b">{row.label}</td>
-                        <td className="py-2 px-3 border-b text-right font-semibold">{row.amount.toLocaleString()}</td>
+                    <tr className="border-b">
+                      <td className="py-2 px-3">
+                        Monthly Tuition Fee
+                        {hasFeeRecord && !hasEdits && (
+                          <span className="ml-2 text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 no-print">from records</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-right font-semibold">{fee.toLocaleString()}</td>
+                    </tr>
+                    {fine > 0 && (
+                      <tr className="border-b">
+                        <td className="py-2 px-3 text-red-600">Fine / Late Charges</td>
+                        <td className="py-2 px-3 text-right text-red-600 font-semibold">+{fine.toLocaleString()}</td>
                       </tr>
-                    ))}
-                    <tr style={{ background: "#f0f4ff" }}>
-                      <td className="py-2.5 px-3 font-bold" style={{ color: NAVY }}>Total Due</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-red-600 text-base">{total.toLocaleString()}</td>
+                    )}
+                    {disc > 0 && (
+                      <tr className="border-b">
+                        <td className="py-2 px-3 text-emerald-700">{e.note || "Discount / Concession"}</td>
+                        <td className="py-2 px-3 text-right text-emerald-700 font-semibold">-{disc.toLocaleString()}</td>
+                      </tr>
+                    )}
+                    {e.note && disc === 0 && (
+                      <tr className="border-b bg-gray-50">
+                        <td className="py-2 px-3 text-gray-500 italic text-xs" colSpan={2}>Note: {e.note}</td>
+                      </tr>
+                    )}
+                    <tr className="bg-gray-50">
+                      <td className="py-2 px-3 font-bold">Total Due</td>
+                      <td className="py-2 px-3 text-right font-bold text-red-600">{total.toLocaleString()}</td>
                     </tr>
                   </tbody>
                 </table>
 
-                {/* Footer */}
                 <div className="flex items-center justify-between text-xs text-gray-500 border-t pt-3">
                   <span>Due Date: <strong className="text-gray-700">{dueDate}</strong></span>
                   <span>Pay before due date to avoid fine</span>
@@ -573,70 +308,6 @@ export default function FeeVoucher() {
           })}
         </div>
       )}
-
-      {/* ── Edit Fee Dialog ── */}
-      <Dialog open={!!editTarget} onOpenChange={() => setEditTarget(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Pencil className="w-4 h-4 text-blue-600" /> Fee Record Edit Karein
-            </DialogTitle>
-          </DialogHeader>
-          {editTarget && (
-            <div className="space-y-3">
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Amount (PKR)</label>
-                <Input type="number" value={editAmount} onChange={e => setEditAmount(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Month</label>
-                <Input type="month" value={editMonth} onChange={e => setEditMonth(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Due Date</label>
-                <Input type="date" value={editDueDate} onChange={e => setEditDueDate(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Fine (PKR)</label>
-                <Input type="number" value={editFine} onChange={e => setEditFine(e.target.value)} />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" className="flex-1" onClick={() => setEditTarget(null)}>Cancel</Button>
-                <Button className="flex-1" disabled={editSaving} style={{ background: NAVY, color: "#fff" }} onClick={handleEditSave}>
-                  {editSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />} Save
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ── Delete All Confirm Dialog ── */}
-      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <Trash2 className="w-5 h-5" /> Vouchers Delete Karein?
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-sm space-y-1">
-              <div className="flex justify-between"><span className="text-gray-500">Class:</span><span className="font-semibold">{selectedClassName}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Month:</span><span className="font-semibold">{monthLabel}</span></div>
-              <div className="flex justify-between"><span className="text-gray-500">Records:</span><span className="font-semibold text-red-600">{savedFeeRecords.length} vouchers</span></div>
-            </div>
-            <p className="text-sm text-gray-500">Yeh <strong>{savedFeeRecords.length}</strong> fee records hamesha ke liye delete ho jaynge.</p>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
-              <Button className="flex-1 bg-red-600 hover:bg-red-700 text-white" disabled={deleting} onClick={handleDeleteAll}>
-                {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
-                Haan, Delete
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
     </div>
   );
 }
