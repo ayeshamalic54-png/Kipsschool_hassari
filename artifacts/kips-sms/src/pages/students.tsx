@@ -4,7 +4,7 @@ import { useListStudents } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { UserPlus, Search, Users, BookOpen, ChevronRight, GraduationCap } from "lucide-react";
+import { UserPlus, Search, Users, ChevronRight, BookOpen } from "lucide-react";
 
 const statusColors: Record<string, string> = {
   active:   "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -19,7 +19,8 @@ export default function Students() {
 
   const { data: students = [], isLoading } = useListStudents();
 
-  const filtered = students.filter((s: any) => {
+  /* ── filtered list ───────────────────────────────────────────────────── */
+  const filtered = (students as any[]).filter((s) => {
     const q = search.toLowerCase();
     const matchSearch =
       !search ||
@@ -27,15 +28,29 @@ export default function Students() {
       s.admissionNumber?.toLowerCase().includes(q) ||
       s.rollNumber?.toLowerCase().includes(q) ||
       s.fatherName?.toLowerCase().includes(q);
-    const matchStatus = statusFilter === "all" || s.status === statusFilter;
-    return matchSearch && matchStatus;
+    return matchSearch && (statusFilter === "all" || s.status === statusFilter);
   });
 
+  /* ── group by class ──────────────────────────────────────────────────── */
+  const grouped: Record<string, any[]> = {};
+  for (const s of filtered) {
+    const key = s.className ?? "No Class Assigned";
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(s);
+  }
+  // sort groups: named classes first (alphabetically), "No Class" last
+  const groupKeys = Object.keys(grouped).sort((a, b) => {
+    if (a === "No Class Assigned") return 1;
+    if (b === "No Class Assigned") return -1;
+    return a.localeCompare(b);
+  });
+
+  /* ── counts ─────────────────────────────────────────────────────────── */
   const counts = {
-    all:      students.length,
-    active:   students.filter((s: any) => s.status === "active").length,
-    inactive: students.filter((s: any) => s.status === "inactive").length,
-    left:     students.filter((s: any) => s.status === "left").length,
+    all:      (students as any[]).length,
+    active:   (students as any[]).filter((s) => s.status === "active").length,
+    inactive: (students as any[]).filter((s) => s.status === "inactive").length,
+    left:     (students as any[]).filter((s) => s.status === "left").length,
   };
 
   return (
@@ -68,7 +83,7 @@ export default function Students() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        <div className="flex gap-2 flex-shrink-0">
+        <div className="flex gap-2 flex-shrink-0 flex-wrap">
           {(["all", "active", "inactive", "left"] as const).map((s) => (
             <button
               key={s}
@@ -86,17 +101,17 @@ export default function Students() {
         </div>
       </div>
 
-      {/* ── Loading skeletons ────────────────────────────────────────────── */}
+      {/* ── Loading ──────────────────────────────────────────────────────── */}
       {isLoading && (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => (
-            <Skeleton key={i} className="h-[72px] w-full rounded-xl" />
+            <Skeleton key={i} className="h-16 w-full rounded-xl" />
           ))}
         </div>
       )}
 
-      {/* ── Empty — no students at all ───────────────────────────────────── */}
-      {!isLoading && students.length === 0 && (
+      {/* ── No students at all ───────────────────────────────────────────── */}
+      {!isLoading && (students as any[]).length === 0 && (
         <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
           <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
           <p className="text-lg font-semibold text-gray-700">Koi student nahi mila</p>
@@ -110,79 +125,95 @@ export default function Students() {
         </div>
       )}
 
-      {/* ── No filter results ────────────────────────────────────────────── */}
-      {!isLoading && students.length > 0 && filtered.length === 0 && (
+      {/* ── Search returned nothing ──────────────────────────────────────── */}
+      {!isLoading && (students as any[]).length > 0 && filtered.length === 0 && (
         <div className="text-center py-16 bg-white rounded-2xl border border-gray-100">
           <Search className="w-10 h-10 mx-auto mb-3 text-gray-300" />
           <p className="font-semibold text-gray-600">Koi nateeja nahi mila</p>
           <p className="text-sm text-gray-400 mt-1">Search ya filter change karein</p>
-          <Button
-            variant="outline"
-            className="mt-3"
-            onClick={() => { setSearch(""); setStatusFilter("all"); }}
-          >
+          <Button variant="outline" className="mt-3"
+            onClick={() => { setSearch(""); setStatusFilter("all"); }}>
             Clear Filters
           </Button>
         </div>
       )}
 
-      {/* ── Student cards ────────────────────────────────────────────────── */}
+      {/* ── CLASS-WISE grouped list ──────────────────────────────────────── */}
       {!isLoading && filtered.length > 0 && (
-        <div className="space-y-2">
-          {filtered.map((student: any) => (
-            <div
-              key={student.id}
-              onClick={() => setLocation(`/students/${student.id}`)}
-              className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
-            >
-              {/* Avatar circle — fixed size, never shrinks */}
-              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 font-bold text-indigo-600 text-sm uppercase overflow-hidden">
-                {student.imageUrl
-                  ? <img src={student.imageUrl} alt={student.name} className="w-full h-full object-cover" />
-                  : (student.name?.charAt(0) ?? "S")}
-              </div>
-
-              {/* Main info — two stable rows, no flex-wrap */}
-              <div className="flex-1 min-w-0">
-                {/* Row 1: name + status badge */}
-                <div className="flex items-center gap-2 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm truncate leading-tight">
-                    {student.name}
-                  </p>
-                  <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border font-medium leading-tight ${statusColors[student.status ?? "active"] ?? statusColors.active}`}>
-                    {student.status}
+        <div className="space-y-6">
+          {groupKeys.map((className) => {
+            const classStudents = grouped[className];
+            return (
+              <div key={className}>
+                {/* Class header */}
+                <div className="flex items-center gap-2 mb-2">
+                  <BookOpen className="w-4 h-4 text-indigo-500" />
+                  <h2 className="text-sm font-bold text-indigo-700 uppercase tracking-wide">
+                    {className}
+                  </h2>
+                  <span className="text-xs text-gray-400 font-medium">
+                    ({classStudents.length} student{classStudents.length !== 1 ? "s" : ""})
                   </span>
+                  <div className="flex-1 h-px bg-indigo-100 ml-1" />
                 </div>
 
-                {/* Row 2: class · admission no · father name — truncated, never wraps */}
-                <p className="text-xs text-gray-500 mt-0.5 truncate leading-tight">
-                  {[
-                    student.className
-                      ? `📚 ${student.className}${student.section ? " - " + student.section : ""}`
-                      : null,
-                    student.admissionNumber ?? null,
-                    student.fatherName ? `S/O ${student.fatherName}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join("  ·  ")}
-                </p>
-              </div>
+                {/* Students under this class */}
+                <div className="space-y-1.5">
+                  {classStudents.map((student: any) => (
+                    <div
+                      key={student.id}
+                      onClick={() => setLocation(`/students/${student.id}`)}
+                      className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition-colors"
+                    >
+                      {/* Avatar */}
+                      <div className="w-9 h-9 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 font-bold text-indigo-600 text-sm uppercase overflow-hidden">
+                        {student.imageUrl
+                          ? <img src={student.imageUrl} alt={student.name} className="w-full h-full object-cover" />
+                          : (student.name?.charAt(0) ?? "S")}
+                      </div>
 
-              {/* Monthly fee — right side, fixed width, stable */}
-              <div className="shrink-0 text-right w-24 hidden sm:block">
-                {student.feeAmount != null ? (
-                  <>
-                    <p className="text-[10px] text-gray-400 leading-none">Monthly Fee</p>
-                    <p className="text-sm font-semibold text-gray-700 leading-tight">
-                      PKR {Number(student.feeAmount).toLocaleString()}
-                    </p>
-                  </>
-                ) : null}
-              </div>
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        {/* Row 1: name + status */}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm truncate leading-tight">
+                            {student.name}
+                          </p>
+                          <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full border font-medium leading-tight ${statusColors[student.status ?? "active"] ?? statusColors.active}`}>
+                            {student.status}
+                          </span>
+                        </div>
 
-              <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
-            </div>
-          ))}
+                        {/* Row 2: admission no · roll · father name */}
+                        <p className="text-xs text-gray-500 mt-0.5 truncate leading-tight">
+                          {[
+                            student.admissionNumber ? `Adm: ${student.admissionNumber}` : null,
+                            student.rollNumber      ? `Roll: ${student.rollNumber}`      : null,
+                            student.section         ? `Sec: ${student.section}`          : null,
+                            student.fatherName      ? `S/O ${student.fatherName}`        : null,
+                          ].filter(Boolean).join("  ·  ")}
+                        </p>
+                      </div>
+
+                      {/* Fee — desktop only */}
+                      <div className="shrink-0 text-right w-28 hidden sm:block">
+                        {student.feeAmount != null && (
+                          <>
+                            <p className="text-[10px] text-gray-400 leading-none">Monthly Fee</p>
+                            <p className="text-sm font-semibold text-gray-700 leading-tight">
+                              PKR {Number(student.feeAmount).toLocaleString()}
+                            </p>
+                          </>
+                        )}
+                      </div>
+
+                      <ChevronRight className="w-4 h-4 text-gray-300 shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
