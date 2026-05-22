@@ -56,7 +56,7 @@ export default function Students() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Students</h1>
           <p className="text-gray-500 text-sm mt-1">
@@ -65,7 +65,7 @@ export default function Students() {
             {section  && <span className="ml-1 text-indigo-600 font-medium">/ Section {section}</span>}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(classId || section) && (
             <Button variant="outline" size="sm" onClick={clearFilter} className="text-gray-500 no-print">
               Clear Filter
