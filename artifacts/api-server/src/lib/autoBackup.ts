@@ -4,7 +4,8 @@ import path from "path";
 import { db } from "@workspace/db";
 import {
   studentsTable, feesTable, attendanceTable, examsTable, examResultsTable,
-  staffTable, salariesTable, accountEntriesTable, certificatesTable, classesTable, usersTable
+  staffTable, salariesTable, accountEntriesTable, certificatesTable, classesTable, usersTable,
+  feeStructuresTable, settingsTable
 } from "@workspace/db";
 import { logger } from "./logger";
 
@@ -26,7 +27,7 @@ function ensureBackupDir() {
 async function runAutoBackup() {
   try {
     ensureBackupDir();
-    const [students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users] = await Promise.all([
+    const [students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings] = await Promise.all([
       db.select().from(studentsTable),
       db.select().from(feesTable),
       db.select().from(attendanceTable),
@@ -38,13 +39,15 @@ async function runAutoBackup() {
       db.select().from(certificatesTable),
       db.select().from(classesTable),
       db.select({ id: usersTable.id, username: usersTable.username, name: usersTable.name, role: usersTable.role, email: usersTable.email }).from(usersTable),
+      db.select().from(feeStructuresTable),
+      db.select().from(settingsTable),
     ]);
 
     const backup = {
       version: "1.0",
       timestamp: new Date().toISOString(),
       note: "auto-daily-backup",
-      data: { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users },
+      data: { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings },
     };
 
     const filename = `auto-backup-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
