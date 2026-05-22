@@ -122,4 +122,28 @@ router.post("/change-password", requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/auth/change-password — change logged-in user's password
+router.put("/change-password", requireAuth, async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const { currentPassword, newPassword } = req.body ?? {};
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ error: "Current and new password are required" }); return;
+    }
+    if (String(newPassword).length < 6) {
+      res.status(400).json({ error: "New password must be at least 6 characters" }); return;
+    }
+    const [dbUser] = await db.select().from(usersTable).where(eq(usersTable.id, user.id)).limit(1);
+    if (!dbUser) { res.status(404).json({ error: "User not found" }); return; }
+    const valid = await comparePassword(String(currentPassword), dbUser.password);
+    if (!valid) { res.status(401).json({ error: "Current password is incorrect" }); return; }
+    const hashed = await hashPassword(String(newPassword));
+    await db.update(usersTable).set({ password: hashed }).where(eq(usersTable.id, user.id));
+    res.json({ message: "Password changed successfully" });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;
