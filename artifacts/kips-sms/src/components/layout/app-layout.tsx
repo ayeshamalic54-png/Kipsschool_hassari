@@ -47,10 +47,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
             {/* ── Global print header: hidden on screen, shown centered on every printout ── */}
             <div className="print-header hidden">
-              <img src="/kips-logo.jpeg" alt="KIPS School Hassari" />
+              <img src={schoolInfo.logoUrl} alt={schoolInfo.name} onError={e => { (e.target as HTMLImageElement).src = "/kips-logo.jpeg"; }} />
               <div className="print-header-text">
-                <div className="print-header-title">KIPS School Hassari</div>
-                <div className="print-header-sub">Bright Future — School Portal</div>
+                <div className="print-header-title">{schoolInfo.name}</div>
+                <div className="print-header-sub">{schoolInfo.tagline} — School Portal</div>
                 <div className="print-header-date">{today}</div>
               </div>
             </div>
@@ -62,3 +62,4 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+
