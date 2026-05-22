@@ -26,7 +26,17 @@ const STATUS_COLORS: Record<string, string> = {
   left:     "bg-red-100 text-red-600",
 };
 
-// Fee record type from API
+// Fee category definitions – matched by "notes" field in feesTable
+const FEE_CATS = [
+  { key: "admissionFee", label: "Admission Fee",  match: /admission/i,  monthPrefix: "Admission" },
+  { key: "examFee",      label: "Exam Fee",        match: /exam/i,       monthPrefix: "Exam"      },
+  { key: "annualFee",    label: "Annual Fee",      match: /annual/i,     monthPrefix: "Annual"    },
+  { key: "transportFee", label: "Transport Fee",   match: /transport/i,  monthPrefix: "Transport" },
+  { key: "booksFee",     label: "Books Fee",       match: /books?/i,     monthPrefix: "Books"     },
+] as const;
+
+type FeeKey = typeof FEE_CATS[number]["key"];
+
 interface FeeRecord {
   id: number;
   amount: number;
@@ -36,15 +46,49 @@ interface FeeRecord {
   status: string;
 }
 
-// Known fee categories by notes keywords
-const FEE_CATEGORIES = [
-  { key: "admission", label: "Admission Fee",  match: /admission/i },
-  { key: "exam",      label: "Exam Fee",       match: /exam/i },
-  { key: "annual",    label: "Annual Fee",     match: /annual/i },
-  { key: "transport", label: "Transport Fee",  match: /transport/i },
-  { key: "books",     label: "Books Fee",      match: /books?/i },
-];
+interface IndividualFees {
+  admissionFee: string;
+  examFee:      string;
+  annualFee:    string;
+  transportFee: string;
+  booksFee:     string;
+}
 
+// Map existing fee records → per-category {amount, id}
+function mapFeeRecords(rows: FeeRecord[]): { values: IndividualFees; ids: Partial<Record<FeeKey, number>> } {
+  const values: IndividualFees = { admissionFee: "", examFee: "", annualFee: "", transportFee: "", booksFee: "" };
+  const ids: Partial<Record<FeeKey, number>> = {};
+  for (const cat of FEE_CATS) {
+    const match = rows.find(r => r.notes && cat.match.test(r.notes));
+    if (match) {
+      values[cat.key] = String(match.amount);
+      ids[cat.key]    = match.id;
+    }
+  }
+  return { values, ids };
+}
+
+// ── Field helper ─────────────────────────────────────────────────────────────
+function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={`space-y-1 ${className}`}>
+      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ── Info row helper ───────────────────────────────────────────────────────────
+function InfoRow({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="flex justify-between items-start py-1.5 border-b last:border-0">
+      <span className="text-xs text-gray-400 shrink-0 w-36">{label}</span>
+      <span className="text-sm font-medium text-gray-900 text-right break-all">{value || "—"}</span>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 export default function StudentDetail() {
   const [, params]      = useRoute("/students/:id");
   const [, setLocation] = useLocation();
@@ -53,19 +97,22 @@ export default function StudentDetail() {
   const studentId       = Number(params?.id);
   const fileRef         = useRef<HTMLInputElement>(null);
 
-  const [mode, setMode]             = useState<"view"|"edit">("view");
-  const [photoPreview, setPhotoPreview] = useState<string|null>(null);
-  const [photoFile, setPhotoFile]   = useState<File|null>(null);
-  const [saving, setSaving]         = useState(false);
+  const [mode,          setMode]          = useState<"view"|"edit">("view");
+  const [photoPreview,  setPhotoPreview]  = useState<string|null>(null);
+  const [photoFile,     setPhotoFile]     = useState<File|null>(null);
+  const [saving,        setSaving]        = useState(false);
 
-  // Student fee records (fetched separately)
-  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>([]);
-
+  // Core student fields
   const [f, setF] = useState({
     name:"", fatherName:"", motherName:"", dateOfBirth:"",
     gender:"", address:"", phone:"", emergencyContact:"",
     classId:"", section:"", rollNumber:"", feeAmount:"", status:"active",
   });
+
+  // Individual fee fields + their existing record IDs
+  const [fees, setFees]     = useState<IndividualFees>({ admissionFee:"", examFee:"", annualFee:"", transportFee:"", booksFee:"" });
+  const [feeIds, setFeeIds] = useState<Partial<Record<FeeKey, number>>>({});
+  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>([]);
 
   const { data: student, isLoading } = useGetStudent(studentId, {
     query: { enabled: !!studentId, queryKey: getGetStudentQueryKey(studentId) },
@@ -73,7 +120,7 @@ export default function StudentDetail() {
   const { data: classes = [] } = useListClasses();
   const updateMut = useUpdateStudent();
 
-  /* Fill form when student loads */
+  // Fill form when student loads
   useEffect(() => {
     if (!student) return;
     const s = student as any;
@@ -86,27 +133,30 @@ export default function StudentDetail() {
       address:          s.address          ?? "",
       phone:            s.phone            ?? "",
       emergencyContact: s.emergencyContact ?? "",
-      classId:          s.classId          ? String(s.classId) : "",
+      classId:          s.classId ? String(s.classId) : "",
       section:          s.section          ?? "",
       rollNumber:       s.rollNumber       ?? "",
-      feeAmount:        s.feeAmount        ? String(s.feeAmount) : "",
-      status:           s.status           ?? "active",
+      feeAmount:        s.feeAmount ? String(s.feeAmount) : "",
+      status:           s.status          ?? "active",
     });
     setPhotoPreview(null);
     setPhotoFile(null);
   }, [student]);
 
-  /* Fetch fee records for this student */
+  // Fetch individual fee records for this student
   useEffect(() => {
     if (!studentId) return;
-    const headers = authHeader();
-    fetch(`/api/fees?studentId=${studentId}`, { headers })
+    fetch(`/api/fees?studentId=${studentId}`, { headers: authHeader() })
       .then(r => r.ok ? r.json() : [])
-      .then((rows: FeeRecord[]) => setFeeRecords(rows))
-      .catch(() => setFeeRecords([]));
+      .then((rows: FeeRecord[]) => {
+        setFeeRecords(rows);
+        const { values, ids } = mapFeeRecords(rows);
+        setFees(values);
+        setFeeIds(ids);
+      })
+      .catch(() => {});
   }, [studentId]);
 
-  /* Image file selected */
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -116,22 +166,53 @@ export default function StudentDetail() {
     reader.readAsDataURL(file);
   };
 
-  /* Save */
+  // ── Upsert individual fee record ────────────────────────────────────────────
+  const upsertFee = async (cat: typeof FEE_CATS[number], amount: number) => {
+    const existingId = feeIds[cat.key];
+    const today   = new Date();
+    const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+    const headers  = { "Content-Type": "application/json", ...authHeader() };
+
+    if (existingId) {
+      // Update existing record amount
+      await fetch(`/api/fees/${existingId}`, {
+        method:  "PUT",
+        headers,
+        body: JSON.stringify({ amount }),
+      });
+    } else {
+      // Create new fee record
+      await fetch("/api/fees", {
+        method:  "POST",
+        headers,
+        body: JSON.stringify({
+          studentId,
+          amount,
+          month:   `${cat.monthPrefix}-${monthKey}`,
+          dueDate: today.toISOString().slice(0, 10),
+          notes:   cat.label,
+        }),
+      });
+    }
+  };
+
+  // ── Save handler ─────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!f.name.trim()) { toast({ variant:"destructive", title:"Name is required" }); return; }
     setSaving(true);
     try {
+      // Upload photo if changed
       if (photoFile) {
         const fd = new FormData();
         fd.append("image", photoFile);
-        const res = await fetch(`/api/students/${studentId}/image`, {
-          method: "POST",
+        await fetch(`/api/students/${studentId}/image`, {
+          method:  "POST",
           headers: authHeader() as HeadersInit,
-          body: fd,
+          body:    fd,
         });
-        if (!res.ok) toast({ variant:"destructive", title:"Photo upload failed — other changes will still save" });
       }
 
+      // Update student core record
       await updateMut.mutateAsync({
         id: studentId,
         data: {
@@ -143,13 +224,31 @@ export default function StudentDetail() {
           address:          f.address          || undefined,
           phone:            f.phone            || undefined,
           emergencyContact: f.emergencyContact || undefined,
-          classId:          f.classId          ? Number(f.classId) : undefined,
+          classId:          f.classId ? Number(f.classId) : undefined,
           section:          f.section          || undefined,
           rollNumber:       f.rollNumber       || undefined,
-          feeAmount:        f.feeAmount        ? Number(f.feeAmount) : undefined,
+          feeAmount:        f.feeAmount ? Number(f.feeAmount) : undefined,
           status:           f.status as any,
         } as any,
       });
+
+      // Upsert individual fee records (skip if empty)
+      for (const cat of FEE_CATS) {
+        const amount = Number(fees[cat.key] || 0);
+        if (amount > 0) {
+          await upsertFee(cat, amount);
+        }
+      }
+
+      // Refresh fee records
+      fetch(`/api/fees?studentId=${studentId}`, { headers: authHeader() })
+        .then(r => r.ok ? r.json() : [])
+        .then((rows: FeeRecord[]) => {
+          setFeeRecords(rows);
+          const { values, ids } = mapFeeRecords(rows);
+          setFees(values);
+          setFeeIds(ids);
+        });
 
       await qc.invalidateQueries({ queryKey: getGetStudentQueryKey(studentId) });
       await qc.invalidateQueries({ queryKey: getListStudentsQueryKey() });
@@ -164,49 +263,12 @@ export default function StudentDetail() {
     }
   };
 
-  /* Build categorized fee breakdown from fee records */
-  const buildFeeBreakdown = () => {
-    const breakdown: { label: string; amount: number; paid: number; status: string }[] = [];
+  // ── Derived: total fee from individual inputs ─────────────────────────────
+  const totalIndividualFee =
+    Object.values(fees).reduce((sum, v) => sum + Number(v || 0), 0) +
+    Number(f.feeAmount || 0);
 
-    for (const cat of FEE_CATEGORIES) {
-      const matching = feeRecords.filter(r => r.notes && cat.match.test(r.notes));
-      if (matching.length > 0) {
-        const totalAmount = matching.reduce((s, r) => s + Number(r.amount), 0);
-        const totalPaid   = matching.reduce((s, r) => s + Number(r.paidAmount), 0);
-        const anyUnpaid   = matching.some(r => r.status !== "paid");
-        breakdown.push({
-          label:  cat.label,
-          amount: totalAmount,
-          paid:   totalPaid,
-          status: anyUnpaid ? "unpaid" : "paid",
-        });
-      }
-    }
-
-    // Other/custom fees not in known categories
-    const knownMatchers = FEE_CATEGORIES.map(c => c.match);
-    const others = feeRecords.filter(r =>
-      !r.notes || !knownMatchers.some(m => r.notes && m.test(r.notes))
-    );
-    for (const o of others) {
-      if (Number(o.amount) > 0) {
-        breakdown.push({
-          label:  o.notes || "Other Fee",
-          amount: Number(o.amount),
-          paid:   Number(o.paidAmount),
-          status: o.status,
-        });
-      }
-    }
-
-    return breakdown;
-  };
-
-  const feeBreakdown = buildFeeBreakdown();
-  const totalFeeRecordsAmount = feeBreakdown.reduce((s, r) => s + r.amount, 0);
-  const totalFeePaid          = feeBreakdown.reduce((s, r) => s + r.paid, 0);
-
-  /* ─── Loading / not found ─────────────────────────────────────────────── */
+  // ── Loading / not found ───────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="space-y-4 max-w-3xl mx-auto">
@@ -219,22 +281,25 @@ export default function StudentDetail() {
   if (!student) return (
     <div className="text-center py-20 text-gray-500">
       <p className="text-lg font-semibold">Student not found</p>
-      <Button variant="outline" className="mt-4" onClick={() => setLocation("/students")}>
-        ← Back to Students
-      </Button>
+      <Button variant="outline" className="mt-4" onClick={() => setLocation("/students")}>← Back</Button>
     </div>
   );
 
-  const s = student as any;
+  const s           = student as any;
+  const displayPhoto = mode === "edit" ? (photoPreview ?? s.imageUrl ?? null) : (s.imageUrl ?? null);
 
-  const displayPhoto = mode === "edit"
-    ? (photoPreview ?? s.imageUrl ?? null)
-    : (s.imageUrl ?? null);
+  // Build known-category breakdown for view mode
+  const knownFeeBreakdown = FEE_CATS
+    .map(cat => {
+      const rec = feeRecords.find(r => r.notes && cat.match.test(r.notes));
+      return rec ? { label: cat.label, amount: rec.amount, paid: rec.paidAmount, status: rec.status } : null;
+    })
+    .filter(Boolean) as { label: string; amount: number; paid: number; status: string }[];
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto">
 
-      {/* ── Top bar ────────────────────────────────────────────────────── */}
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => setLocation("/students")}>
@@ -251,15 +316,11 @@ export default function StudentDetail() {
             <Printer className="w-4 h-4 mr-1" /> Print
           </Button>
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            <Button type="button" size="sm"
-              variant={mode === "view" ? "default" : "ghost"}
-              className="h-8 px-3 gap-1.5"
+            <Button size="sm" variant={mode === "view" ? "default" : "ghost"} className="h-8 px-3 gap-1.5"
               onClick={() => { setMode("view"); setPhotoPreview(null); setPhotoFile(null); }}>
               <Eye className="w-3.5 h-3.5" /> View
             </Button>
-            <Button type="button" size="sm"
-              variant={mode === "edit" ? "default" : "ghost"}
-              className="h-8 px-3 gap-1.5"
+            <Button size="sm" variant={mode === "edit" ? "default" : "ghost"} className="h-8 px-3 gap-1.5"
               onClick={() => setMode("edit")}>
               <Pencil className="w-3.5 h-3.5" /> Edit
             </Button>
@@ -272,7 +333,6 @@ export default function StudentDetail() {
       {/* ══════════════════════════════════════════════════════════════════ */}
       {mode === "view" && (
         <div className="space-y-4">
-
           {/* Photo + summary */}
           <Card>
             <CardContent className="pt-5 flex items-center gap-5">
@@ -299,7 +359,7 @@ export default function StudentDetail() {
             {/* Personal */}
             <Card>
               <CardHeader><CardTitle className="text-sm">Personal Information</CardTitle></CardHeader>
-              <CardContent className="pt-0 space-y-0">
+              <CardContent className="pt-0">
                 {[
                   ["Father Name",       s.fatherName],
                   ["Mother Name",       s.motherName],
@@ -308,33 +368,23 @@ export default function StudentDetail() {
                   ["Phone",             s.phone],
                   ["Emergency Contact", s.emergencyContact],
                   ["Address",           s.address],
-                  ["Login Username",    s.username],
-                ].map(([lbl, val]) => (
-                  <div key={lbl} className="flex justify-between items-start py-1.5 border-b last:border-0">
-                    <span className="text-xs text-gray-400 w-36 shrink-0">{lbl}</span>
-                    <span className="text-sm text-gray-900 font-medium text-right break-all">{val || "—"}</span>
-                  </div>
-                ))}
+                  ["Username",          s.username],
+                ].map(([lbl, val]) => <InfoRow key={lbl as string} label={lbl as string} value={val as string} />)}
               </CardContent>
             </Card>
 
             {/* Academic + status */}
             <div className="space-y-4">
               <Card>
-                <CardHeader><CardTitle className="text-sm">Academic Info</CardTitle></CardHeader>
-                <CardContent className="pt-0 space-y-0">
+                <CardHeader><CardTitle className="text-sm">Academic & Fee Info</CardTitle></CardHeader>
+                <CardContent className="pt-0">
                   {[
                     ["Class",         s.className],
                     ["Section",       s.section],
                     ["Roll Number",   s.rollNumber],
                     ["Monthly Fee",   s.feeAmount ? `PKR ${Number(s.feeAmount).toLocaleString()}` : null],
                     ["Admission No.", s.admissionNumber],
-                  ].map(([lbl, val]) => (
-                    <div key={lbl} className="flex justify-between items-center py-1.5 border-b last:border-0">
-                      <span className="text-xs text-gray-400">{lbl}</span>
-                      <span className="text-sm font-medium text-gray-900">{val || "—"}</span>
-                    </div>
-                  ))}
+                  ].map(([lbl, val]) => <InfoRow key={lbl as string} label={lbl as string} value={val as string} />)}
                 </CardContent>
               </Card>
 
@@ -342,8 +392,7 @@ export default function StudentDetail() {
                 <CardHeader><CardTitle className="text-sm">Change Status</CardTitle></CardHeader>
                 <CardContent className="pt-0 flex flex-col gap-2">
                   {(["active","inactive","left"] as const).map(st => (
-                    <Button key={st} size="sm"
-                      variant={s.status === st ? "default" : "outline"}
+                    <Button key={st} size="sm" variant={s.status === st ? "default" : "outline"}
                       className="capitalize justify-start"
                       disabled={s.status === st || updateMut.isPending}
                       onClick={() => updateMut.mutate({ id: studentId, data:{ status: st } as any }, {
@@ -362,12 +411,10 @@ export default function StudentDetail() {
             </div>
           </div>
 
-          {/* ── Fee Breakdown ──────────────────────────────────────────────── */}
-          {feeBreakdown.length > 0 && (
+          {/* Fee breakdown from fee records */}
+          {knownFeeBreakdown.length > 0 && (
             <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Fee Breakdown (Admission Fees)</CardTitle>
-              </CardHeader>
+              <CardHeader><CardTitle className="text-sm">Fee Breakdown (Recorded Fees)</CardTitle></CardHeader>
               <CardContent className="pt-0">
                 <table className="w-full text-sm">
                   <thead>
@@ -379,31 +426,22 @@ export default function StudentDetail() {
                     </tr>
                   </thead>
                   <tbody>
-                    {feeBreakdown.map((row, i) => (
+                    {knownFeeBreakdown.map((row, i) => (
                       <tr key={i} className="border-b last:border-0">
                         <td className="py-2 text-gray-700">{row.label}</td>
-                        <td className="py-2 text-right font-medium text-gray-900">PKR {row.amount.toLocaleString()}</td>
+                        <td className="py-2 text-right font-medium">PKR {row.amount.toLocaleString()}</td>
                         <td className="py-2 text-right text-emerald-700">PKR {row.paid.toLocaleString()}</td>
                         <td className="py-2 text-right">
                           <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                            row.status === "paid" ? "bg-emerald-100 text-emerald-700" :
-                            row.status === "partial" ? "bg-yellow-100 text-yellow-700" :
-                            "bg-red-100 text-red-600"
-                          }`}>
+                            row.status === "paid"    ? "bg-emerald-100 text-emerald-700" :
+                            row.status === "partial" ? "bg-yellow-100 text-yellow-700"  :
+                            "bg-red-100 text-red-600"}`}>
                             {row.status}
                           </span>
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-gray-200">
-                      <td className="py-2 font-bold text-gray-800">Total</td>
-                      <td className="py-2 text-right font-bold text-gray-900">PKR {totalFeeRecordsAmount.toLocaleString()}</td>
-                      <td className="py-2 text-right font-bold text-emerald-700">PKR {totalFeePaid.toLocaleString()}</td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
                 </table>
               </CardContent>
             </Card>
@@ -417,67 +455,43 @@ export default function StudentDetail() {
       {mode === "edit" && (
         <div className="space-y-4">
 
-          {/* ── Photo section ────────────────────────────────────────────── */}
+          {/* Photo */}
           <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Student Photo</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-sm">Student Photo</CardTitle></CardHeader>
             <CardContent className="flex items-center gap-5">
               <div className="relative shrink-0">
                 <div className="w-24 h-24 rounded-full border-2 border-indigo-300 overflow-hidden bg-indigo-50 flex items-center justify-center">
                   {displayPhoto
-                    ? <img src={displayPhoto} alt="Student"
-                        className="w-full h-full object-cover"
+                    ? <img src={displayPhoto} alt="Student" className="w-full h-full object-cover"
                         onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     : <User className="w-10 h-10 text-indigo-300" />}
                 </div>
                 <button type="button" onClick={() => fileRef.current?.click()}
-                  className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg transition-colors">
+                  className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg">
                   <Camera className="w-4 h-4" />
                 </button>
               </div>
-
-              <div className="flex-1 min-w-0">
-                {displayPhoto ? (
-                  <div>
-                    <p className="text-sm font-medium text-gray-700 mb-1">
-                      {photoFile ? `Nai photo: ${photoFile.name}` : "Mौjuda photo موجود ہے"}
-                    </p>
-                    <p className="text-xs text-gray-400 mb-3">Change karna chahain toh neeche click karein</p>
-                  </div>
-                ) : (
-                  <div>
-                    <p className="text-sm font-medium text-gray-500 mb-1">Koi photo nahi hai</p>
-                    <p className="text-xs text-gray-400 mb-3">Student ki photo upload karein</p>
-                  </div>
-                )}
-                <div className="flex gap-2 flex-wrap">
-                  <Button type="button" variant="outline" size="sm"
-                    onClick={() => fileRef.current?.click()}
-                    className="gap-1.5">
-                    <Camera className="w-3.5 h-3.5" />
-                    {displayPhoto ? "Photo Change Karein" : "Photo Upload Karein"}
+              <div className="flex gap-2 flex-wrap">
+                <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} className="gap-1.5">
+                  <Camera className="w-3.5 h-3.5" /> {displayPhoto ? "Change Photo" : "Upload Photo"}
+                </Button>
+                {photoPreview && (
+                  <Button type="button" variant="ghost" size="sm" className="text-red-500 gap-1.5"
+                    onClick={() => { setPhotoPreview(null); setPhotoFile(null); if (fileRef.current) fileRef.current.value = ""; }}>
+                    <X className="w-3.5 h-3.5" /> Remove
                   </Button>
-                  {photoPreview && (
-                    <Button type="button" variant="ghost" size="sm"
-                      className="text-red-500 hover:text-red-700 gap-1.5"
-                      onClick={() => { setPhotoPreview(null); setPhotoFile(null); if (fileRef.current) fileRef.current.value = ""; }}>
-                      <X className="w-3.5 h-3.5" /> Cancel
-                    </Button>
-                  )}
-                </div>
+                )}
               </div>
-              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp"
-                className="hidden" onChange={onFileChange} />
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={onFileChange} />
             </CardContent>
           </Card>
 
-          {/* ── Personal info ─────────────────────────────────────────────── */}
+          {/* Personal info */}
           <Card>
             <CardHeader><CardTitle className="text-sm">Personal Information</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Field label="Full Name *">
-                <Input value={f.name} onChange={e => setF(p => ({ ...p, name: e.target.value }))} placeholder="Student full name" />
+              <Field label="Full Name *" className="sm:col-span-2">
+                <Input value={f.name} onChange={e => setF(p => ({ ...p, name: e.target.value }))} placeholder="Full name" />
               </Field>
               <Field label="Father Name">
                 <Input value={f.fatherName} onChange={e => setF(p => ({ ...p, fatherName: e.target.value }))} placeholder="Father's name" />
@@ -501,7 +515,7 @@ export default function StudentDetail() {
                 <Input value={f.phone} onChange={e => setF(p => ({ ...p, phone: e.target.value }))} placeholder="0300-0000000" />
               </Field>
               <Field label="Emergency Contact">
-                <Input value={f.emergencyContact} onChange={e => setF(p => ({ ...p, emergencyContact: e.target.value }))} placeholder="Emergency number" />
+                <Input value={f.emergencyContact} onChange={e => setF(p => ({ ...p, emergencyContact: e.target.value }))} />
               </Field>
               <Field label="Address" className="sm:col-span-2">
                 <Input value={f.address} onChange={e => setF(p => ({ ...p, address: e.target.value }))} placeholder="Home address" />
@@ -509,9 +523,9 @@ export default function StudentDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Academic + fee ─────────────────────────────────────────────── */}
+          {/* Academic */}
           <Card>
-            <CardHeader><CardTitle className="text-sm">Academic & Fee Info</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">Academic Info</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Class">
                 <Select value={f.classId} onValueChange={v => setF(p => ({ ...p, classId: v }))}>
@@ -529,9 +543,6 @@ export default function StudentDetail() {
               <Field label="Roll Number">
                 <Input value={f.rollNumber} onChange={e => setF(p => ({ ...p, rollNumber: e.target.value }))} placeholder="01" />
               </Field>
-              <Field label="Monthly Fee (PKR)">
-                <Input type="number" value={f.feeAmount} onChange={e => setF(p => ({ ...p, feeAmount: e.target.value }))} placeholder="2500" />
-              </Field>
               <Field label="Status">
                 <Select value={f.status} onValueChange={v => setF(p => ({ ...p, status: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -545,45 +556,84 @@ export default function StudentDetail() {
             </CardContent>
           </Card>
 
-          {/* ── Fee Breakdown (from admission) ──────────────────────────── */}
-          {feeBreakdown.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-sm">Fee Breakdown (Admission Fees)</CardTitle>
-                <p className="text-xs text-gray-400 mt-0.5">Ye fees admission ke waqt record ki gayi hain</p>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-2">
-                  {feeBreakdown.map((row, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
-                      <div>
-                        <p className="text-sm font-medium text-gray-800">{row.label}</p>
-                        <p className="text-xs text-gray-400">
-                          Paid: PKR {row.paid.toLocaleString()} / PKR {row.amount.toLocaleString()}
-                        </p>
+          {/* ── Fee Breakdown (editable) ─────────────────────────────────── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Fee Details</CardTitle>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Har fee alag se save hogi. 0 ya khali chhorne se record nahi banega.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Monthly fee */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Monthly Fee (PKR)">
+                  <Input
+                    type="number" min="0" placeholder="0"
+                    value={f.feeAmount}
+                    onChange={e => setF(p => ({ ...p, feeAmount: e.target.value }))}
+                  />
+                </Field>
+              </div>
+
+              <div className="border-t pt-3">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  One-Time / Additional Fees
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {FEE_CATS.map(cat => (
+                    <Field key={cat.key} label={cat.label + " (PKR)"}>
+                      <div className="relative">
+                        <Input
+                          type="number" min="0" placeholder="0"
+                          value={fees[cat.key]}
+                          onChange={e => setFees(p => ({ ...p, [cat.key]: e.target.value }))}
+                          className={feeIds[cat.key] ? "border-emerald-300 focus:ring-emerald-300" : ""}
+                        />
+                        {feeIds[cat.key] && (
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-emerald-600 font-medium bg-emerald-50 px-1.5 py-0.5 rounded">
+                            Saved
+                          </span>
+                        )}
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-gray-900">PKR {row.amount.toLocaleString()}</p>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                          row.status === "paid"    ? "bg-emerald-100 text-emerald-700" :
-                          row.status === "partial" ? "bg-yellow-100 text-yellow-700" :
-                          "bg-red-100 text-red-600"
-                        }`}>
-                          {row.status}
-                        </span>
-                      </div>
-                    </div>
+                      {feeIds[cat.key] ? (
+                        <p className="text-xs text-emerald-600">Existing record — amount update ho jayegi</p>
+                      ) : (
+                        <p className="text-xs text-gray-400">Amount daalen toh naya record banega</p>
+                      )}
+                    </Field>
                   ))}
                 </div>
-                <div className="flex justify-between items-center mt-3 pt-3 border-t-2 border-gray-200">
-                  <span className="text-sm font-bold text-gray-800">Total Admission Fees</span>
-                  <span className="text-base font-bold text-gray-900">PKR {totalFeeRecordsAmount.toLocaleString()}</span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+              </div>
 
-          {/* ── Action buttons ─────────────────────────────────────────────── */}
+              {/* Live total summary */}
+              {totalIndividualFee > 0 && (
+                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg p-4 mt-2">
+                  <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wide mb-2">Fee Summary</p>
+                  <div className="space-y-1 text-sm">
+                    {Number(f.feeAmount) > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Monthly Fee</span>
+                        <span className="font-medium">PKR {Number(f.feeAmount).toLocaleString()}</span>
+                      </div>
+                    )}
+                    {FEE_CATS.map(cat => Number(fees[cat.key]) > 0 && (
+                      <div key={cat.key} className="flex justify-between">
+                        <span className="text-gray-600">{cat.label}</span>
+                        <span className="font-medium">PKR {Number(fees[cat.key]).toLocaleString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-between items-center mt-2 pt-2 border-t border-indigo-200">
+                    <span className="text-sm font-bold text-gray-800">Total</span>
+                    <span className="text-base font-bold text-red-600">PKR {totalIndividualFee.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Action buttons */}
           <div className="flex gap-3 justify-end">
             <Button type="button" variant="outline" disabled={saving}
               onClick={() => { setMode("view"); setPhotoPreview(null); setPhotoFile(null); }}>
@@ -598,16 +648,6 @@ export default function StudentDetail() {
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ── Small helper for labeled fields ─────────────────────────────────────── */
-function Field({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`space-y-1 ${className}`}>
-      <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</label>
-      {children}
     </div>
   );
 }
