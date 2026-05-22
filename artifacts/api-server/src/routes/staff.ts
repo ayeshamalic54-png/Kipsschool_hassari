@@ -59,6 +59,20 @@ router.patch("/:id", requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/staff/:id  (same as PATCH — frontend uses PUT for edit)
+router.put("/:id", requireAuth, async (req, res) => {
+  try {
+    const staffId = Number(req.params.id);
+    const [existing] = await db.select().from(staffTable).where(eq(staffTable.id, staffId));
+    if (!existing) { res.status(404).json({ error: "Staff not found" }); return; }
+    const [updated] = await db.update(staffTable).set({ ...req.body, updatedAt: new Date() }).where(eq(staffTable.id, staffId)).returning();
+    res.json({ ...updated, salary: updated.salary ? Number(updated.salary) : null });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // DELETE /api/staff/:id
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
