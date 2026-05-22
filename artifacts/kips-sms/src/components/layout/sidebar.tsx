@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSchoolInfo } from "@/lib/school-info";
 import {
   LayoutDashboard,
   Users,
@@ -52,8 +53,9 @@ const getNavigation = (role?: string) => {
 
 export function Sidebar() {
   const [location, setLocation] = useLocation();
-  const searchStr = useSearch(); // wouter v3 — reactive query string
+  const searchStr = useSearch();
   const { user, logout } = useAuthStore();
+  const schoolInfo = useSchoolInfo();
   const navigation = getNavigation(user?.role);
   const [studentsExpanded, setStudentsExpanded] = useState(
     location.startsWith("/students")
@@ -67,14 +69,15 @@ export function Sidebar() {
     <div className="flex flex-col h-full w-64 border-r shadow-sm no-print" style={{ background: "#fff" }}>
       <div className="p-4 flex items-center gap-3 border-b" style={{ borderColor: "#e5e7eb" }}>
         <img
-          src="/kips-logo.jpeg"
-          alt="KIPS"
+          src={schoolInfo.logoUrl}
+          alt="School Logo"
           className="w-11 h-11 rounded-full object-cover border-2 shadow"
           style={{ borderColor: ORANGE }}
+          onError={e => { (e.target as HTMLImageElement).src = "/kips-logo.jpeg"; }}
         />
         <div>
-          <h1 className="font-bold text-base leading-tight" style={{ color: NAVY }}>KIPS School</h1>
-          <p className="text-[10px] uppercase font-semibold tracking-wider" style={{ color: ORANGE }}>Hassari • Bright Future</p>
+          <h1 className="font-bold text-base leading-tight truncate max-w-[140px]" style={{ color: NAVY }}>{schoolInfo.name}</h1>
+          <p className="text-[10px] uppercase font-semibold tracking-wider truncate max-w-[140px]" style={{ color: ORANGE }}>{schoolInfo.tagline}</p>
         </div>
       </div>
 
