@@ -191,22 +191,33 @@ function SalarySlip({ salary, onClose }: { salary: Salary; onClose: () => void }
     const content = slipRef.current?.innerHTML;
     const w = window.open("", "_blank");
     if (!w || !content) return;
-    w.document.write(`<html><head><title>Salary Slip — ${salary.staffName}</title>
-      <style>
-        @page { size: A4 portrait; margin: 0; }
-        body { font-family: Arial, sans-serif; padding: 30px; color: #111; margin: 0; }
-        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
-        td, th { padding: 6px 10px; border: 1px solid #ddd; }
-        th { background: #f0f4ff; font-weight: 600; text-align: left; }
-        .net-row td { font-weight: bold; font-size: 15px; background: #1a2a5e; color: white; }
-        .footer { margin-top: 50px; display: flex; justify-content: space-between; }
-        .sig { border-top: 1px solid #333; width: 150px; text-align: center; padding-top: 4px; font-size: 12px; }
-      </style></head><body>
+    const slip = `
       ${content}
       <div class="footer">
         <div class="sig">Employee Signature</div>
         <div class="sig">Principal Signature</div>
-      </div></body></html>`);
+      </div>`;
+    w.document.write(`<html><head><title>Salary Slip — ${salary.staffName}</title>
+      <style>
+        @page { size: A4 portrait; margin: 15mm; }
+        body { font-family: Arial, sans-serif; color: #111; margin: 0; }
+        table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13px; }
+        td, th { padding: 6px 10px; border: 1px solid #ddd; }
+        th { background: #f0f4ff; font-weight: 600; text-align: left; }
+        .net-row td { font-weight: bold; font-size: 15px; background: #1a2a5e; color: white; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; }
+        .sig { border-top: 1px solid #333; width: 150px; text-align: center; padding-top: 4px; font-size: 12px; }
+        .copy-label { font-size: 11px; font-weight: bold; color: #555; text-transform: uppercase;
+          letter-spacing: 1px; border: 1px dashed #aaa; display: inline-block;
+          padding: 2px 10px; margin-bottom: 8px; border-radius: 3px; }
+        .divider { border: none; border-top: 2px dashed #bbb; margin: 30px 0; }
+      </style></head><body>
+      <div class="copy-label">School Copy</div>
+      ${slip}
+      <hr class="divider" />
+      <div class="copy-label">Employee Copy</div>
+      ${slip}
+      </body></html>`);
     w.document.close();
     w.print();
   };
