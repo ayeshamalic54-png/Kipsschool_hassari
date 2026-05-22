@@ -3,6 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
+import { useSchoolInfo } from "@/lib/school-info";
 import { useLogin } from "@workspace/api-client-react";
 import { useAuthStore } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export default function Login() {
   const { login } = useAuthStore();
   const { toast } = useToast();
   const loginMutation = useLogin();
+  const schoolInfo = useSchoolInfo();
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -68,13 +70,14 @@ export default function Login() {
         <div className="backdrop-blur-xl bg-white/95 p-8 rounded-3xl shadow-2xl border border-white/30">
           <div className="flex flex-col items-center mb-8">
             <img
-              src="/kips-logo.jpeg"
-              alt="KIPS School Hassari"
+              src={schoolInfo.logoUrl}
+              alt={schoolInfo.name}
               className="w-24 h-24 rounded-full object-cover shadow-xl border-4 border-white mb-4"
               style={{ boxShadow: "0 0 0 4px #e07b1a, 0 8px 32px rgba(26,42,94,0.3)" }}
+              onError={e => { (e.target as HTMLImageElement).src = "/kips-logo.jpeg"; }}
             />
             <h1 className="text-2xl font-bold text-center" style={{ color: "#1a2a5e" }}>
-              KIPS School Hassari
+              {schoolInfo.name}
             </h1>
             <p className="text-sm text-gray-500 mt-1 font-medium tracking-wide">
               Bright Future — School Portal
