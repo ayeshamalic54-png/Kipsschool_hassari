@@ -44,7 +44,7 @@ function sanitizeRow(row: Record<string, unknown>): Record<string, unknown> {
 }
 
 async function collectAllData() {
-  const [students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings] = await Promise.all([
+  const [students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users] = await Promise.all([
     db.select().from(studentsTable),
     db.select().from(feesTable),
     db.select().from(attendanceTable),
@@ -56,9 +56,12 @@ async function collectAllData() {
     db.select().from(certificatesTable),
     db.select().from(classesTable),
     db.select({ id: usersTable.id, username: usersTable.username, name: usersTable.name, role: usersTable.role, email: usersTable.email }).from(usersTable),
-    db.select().from(feeStructuresTable),
-    db.select().from(settingsTable),
   ]);
+  // These tables may not exist in older DB deployments — fail gracefully
+  let feeStructures: any[] = [];
+  let settings: any[] = [];
+  try { feeStructures = await db.select().from(feeStructuresTable); } catch { feeStructures = []; }
+  try { settings = await db.select().from(settingsTable); } catch { settings = []; }
   return { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings };
 }
 
@@ -489,3 +492,4 @@ router.post("/sync-student-users", requireAuth, async (req, res) => {
 });
 
 export default router;
+
