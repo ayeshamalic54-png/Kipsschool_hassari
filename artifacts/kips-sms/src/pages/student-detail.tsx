@@ -201,14 +201,12 @@ export default function StudentDetail() {
     if (!f.name.trim()) { toast({ variant:"destructive", title:"Name is required" }); return; }
     setSaving(true);
     try {
-      // Upload photo if changed
-      if (photoFile) {
-        const fd = new FormData();
-        fd.append("image", photoFile);
-        await fetch(`/api/students/${studentId}/image`, {
-          method:  "POST",
-          headers: authHeader() as HeadersInit,
-          body:    fd,
+      // Photo as base64 directly into DB — no filesystem needed on Render
+      if (photoFile && photoPreview) {
+        await fetch(`/api/students/${studentId}`, {
+          method:  "PATCH",
+          headers: { ...authHeader(), "Content-Type": "application/json" } as HeadersInit,
+          body:    JSON.stringify({ imageUrl: photoPreview }),
         });
       }
 
@@ -651,3 +649,4 @@ export default function StudentDetail() {
     </div>
   );
 }
+
