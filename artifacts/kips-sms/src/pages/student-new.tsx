@@ -32,6 +32,7 @@ const schema = z.object({
   examFee:          z.string().optional(),
   annualFee:        z.string().optional(),
   transportFee:     z.string().optional(),
+  booksFee:         z.string().optional(),
   siblingDiscount:  z.string().optional(),
   status:           z.enum(["active", "inactive", "left"]).default("active"),
 });
@@ -62,6 +63,7 @@ interface AdmissionData {
   examFee:         number;
   annualFee:       number;
   transportFee:    number;
+  booksFee:        number;
   siblingDiscount: number;
   customFees:      CustomFeeRow[];
   phone:           string;
@@ -74,6 +76,7 @@ function buildAdmissionReceiptHtml(d: AdmissionData, logoSrc: string): string {
     d.examFee +
     d.annualFee +
     d.transportFee +
+    d.booksFee +
     d.customFees.reduce((s, f) => s + Number(f.amount || 0), 0) +
     Math.max(0, d.monthlyFee - d.siblingDiscount);
 
@@ -113,6 +116,7 @@ function buildAdmissionReceiptHtml(d: AdmissionData, logoSrc: string): string {
         ${feeRow("Exam Fee", d.examFee)}
         ${feeRow("Annual Fee", d.annualFee)}
         ${feeRow("Transport Fee", d.transportFee)}
+        ${feeRow("Books Fee", d.booksFee)}
         ${d.customFees.filter(f => Number(f.amount) > 0).map(f => feeRow(f.name || "Custom Fee", Number(f.amount))).join("")}
         ${d.siblingDiscount > 0
           ? `<div class="row"><span class="k discount">Sibling Discount</span><span class="v discount">− PKR ${d.siblingDiscount.toLocaleString()}</span></div>`
@@ -187,7 +191,7 @@ function buildAdmissionReceiptHtml(d: AdmissionData, logoSrc: string): string {
 <body><div class="page">
   ${copy("School Copy", "#1a2a5e")}
   <div class="cut-line">✂ &nbsp;━━━━━━━━━━━━━━━ CUT HERE ━━━━━━━━━━━━━━━ &nbsp;✂</div>
-  ${copy("Parent Copy", "#7c3aed")}
+  ${copy("Student Copy", "#7c3aed")}
 </div>
 <script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>
 </body></html>`;
@@ -242,7 +246,6 @@ export default function StudentNew() {
       if (fs.admissionFee) form.setValue("admissionFee", String(fs.admissionFee));
       if (fs.examFee)      form.setValue("examFee",      String(fs.examFee));
       if (fs.transportFee) form.setValue("transportFee", String(fs.transportFee));
-      // annualFee not in fee-structure yet — leave blank for manual entry
     } catch { /* non-fatal */ }
   };
 
@@ -301,11 +304,12 @@ export default function StudentNew() {
             }
           }
 
-          const admissionFee   = Number(values.admissionFee   || 0);
-          const examFee        = Number(values.examFee        || 0);
-          const annualFee      = Number(values.annualFee      || 0);
-          const transportFee   = Number(values.transportFee   || 0);
-          const monthlyFee     = Number(values.feeAmount      || 0);
+          const admissionFee    = Number(values.admissionFee   || 0);
+          const examFee         = Number(values.examFee        || 0);
+          const annualFee       = Number(values.annualFee      || 0);
+          const transportFee    = Number(values.transportFee   || 0);
+          const booksFee        = Number(values.booksFee       || 0);
+          const monthlyFee      = Number(values.feeAmount      || 0);
           const siblingDiscount = Number(values.siblingDiscount || 0);
           const today    = new Date();
           const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
@@ -317,6 +321,7 @@ export default function StudentNew() {
             { amount: examFee,       month: `Exam-${monthKey}`,      notes: "Exam Fee" },
             { amount: annualFee,     month: `Annual-${monthKey}`,    notes: "Annual Fee" },
             { amount: transportFee,  month: `Transport-${monthKey}`, notes: "Transport Fee" },
+            { amount: booksFee,      month: `Books-${monthKey}`,     notes: "Books Fee" },
             ...customFees
               .filter(f => Number(f.amount) > 0 && f.name)
               .map(f => ({ amount: Number(f.amount), month: `${f.name}-${monthKey}`, notes: f.name })),
@@ -355,6 +360,7 @@ export default function StudentNew() {
             examFee,
             annualFee,
             transportFee,
+            booksFee,
             siblingDiscount,
             customFees,
             phone:   values.phone || "",
@@ -366,6 +372,15 @@ export default function StudentNew() {
           if (w) {
             w.document.write(buildAdmissionReceiptHtml(slipData, logoSrc));
             w.document.close();
+          } else {
+            // Fallback if popup blocked
+            const blob = new Blob([buildAdmissionReceiptHtml(slipData, logoSrc)], { type: "text/html" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.target = "_blank";
+            a.click();
+            setTimeout(() => URL.revokeObjectURL(url), 5000);
           }
 
           queryClient.invalidateQueries({ queryKey: ["listStudents"] });
@@ -388,6 +403,7 @@ export default function StudentNew() {
     Number(watchedValues.examFee        || 0) +
     Number(watchedValues.annualFee      || 0) +
     Number(watchedValues.transportFee   || 0) +
+    Number(watchedValues.booksFee       || 0) +
     customFees.reduce((s, f) => s + Number(f.amount || 0), 0) -
     Number(watchedValues.siblingDiscount || 0);
 
@@ -467,20 +483,21 @@ export default function StudentNew() {
                 <PreviewRow label="Date of Birth"    value={watchedValues.dateOfBirth} />
                 <PreviewRow label="Gender"           value={watchedValues.gender} />
                 <PreviewRow label="Phone"            value={watchedValues.phone} />
-                <PreviewRow label="Emergency Contact" value={watchedValues.emergencyContact} />
+                <PreviewRow label="Emergency"        value={watchedValues.emergencyContact} />
                 <PreviewRow label="Address"          value={watchedValues.address} />
               </CardContent>
             </Card>
 
-            {/* Fee Summary */}
+            {/* Fee Details */}
             <Card>
-              <CardHeader><CardTitle className="text-sm">Fee Summary</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Fee Breakdown</CardTitle></CardHeader>
               <CardContent className="space-y-0 pt-0">
-                <PreviewRow label="Monthly Fee"    value={watchedValues.feeAmount     ? `PKR ${Number(watchedValues.feeAmount).toLocaleString()}`    : undefined} />
-                <PreviewRow label="Admission Fee"  value={watchedValues.admissionFee  ? `PKR ${Number(watchedValues.admissionFee).toLocaleString()}`  : undefined} />
-                <PreviewRow label="Exam Fee"       value={watchedValues.examFee       ? `PKR ${Number(watchedValues.examFee).toLocaleString()}`       : undefined} />
-                <PreviewRow label="Annual Fee"     value={watchedValues.annualFee     ? `PKR ${Number(watchedValues.annualFee).toLocaleString()}`     : undefined} />
-                <PreviewRow label="Transport Fee"  value={watchedValues.transportFee  ? `PKR ${Number(watchedValues.transportFee).toLocaleString()}`  : undefined} />
+                <PreviewRow label="Monthly Fee"    value={watchedValues.feeAmount    ? `PKR ${Number(watchedValues.feeAmount).toLocaleString()}`    : undefined} />
+                <PreviewRow label="Admission Fee"  value={watchedValues.admissionFee ? `PKR ${Number(watchedValues.admissionFee).toLocaleString()}`  : undefined} />
+                <PreviewRow label="Exam Fee"       value={watchedValues.examFee      ? `PKR ${Number(watchedValues.examFee).toLocaleString()}`       : undefined} />
+                <PreviewRow label="Annual Fee"     value={watchedValues.annualFee    ? `PKR ${Number(watchedValues.annualFee).toLocaleString()}`     : undefined} />
+                <PreviewRow label="Transport Fee"  value={watchedValues.transportFee ? `PKR ${Number(watchedValues.transportFee).toLocaleString()}`  : undefined} />
+                <PreviewRow label="Books Fee"      value={watchedValues.booksFee     ? `PKR ${Number(watchedValues.booksFee).toLocaleString()}`      : undefined} />
                 {customFees.filter(f => f.name && Number(f.amount) > 0).map(f => (
                   <PreviewRow key={f.id} label={f.name} value={`PKR ${Number(f.amount).toLocaleString()}`} />
                 ))}
@@ -678,6 +695,12 @@ export default function StudentNew() {
                       <FormControl><Input type="number" min="0" placeholder="0" {...field} /></FormControl>
                     </FormItem>
                   )} />
+                  <FormField control={form.control} name="booksFee" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Books Fee (PKR)</FormLabel>
+                      <FormControl><Input type="number" min="0" placeholder="0" {...field} /></FormControl>
+                    </FormItem>
+                  )} />
                   <FormField control={form.control} name="siblingDiscount" render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1">
@@ -694,7 +717,7 @@ export default function StudentNew() {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">Custom Fees</p>
+                      <p className="text-sm font-semibold text-gray-800">Additional Fees</p>
                       <p className="text-xs text-gray-500">Koi bhi extra fee add karo — jaise library fee, sports fee, etc.</p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={addCustomFee} className="gap-1.5 h-8">
@@ -703,7 +726,7 @@ export default function StudentNew() {
                   </div>
                   {customFees.length === 0 && (
                     <div className="text-center py-4 border-2 border-dashed border-gray-200 rounded-lg text-gray-400 text-sm">
-                      Koi custom fee nahi — "Add Fee" button dabaen
+                      Koi additional fee nahi — "Add Fee" button dabaen
                     </div>
                   )}
                   <div className="space-y-2">
@@ -747,6 +770,7 @@ export default function StudentNew() {
                       {Number(watchedValues.examFee)       > 0 && <div className="flex justify-between"><span className="text-gray-600">Exam Fee</span><span className="font-medium">PKR {Number(watchedValues.examFee).toLocaleString()}</span></div>}
                       {Number(watchedValues.annualFee)     > 0 && <div className="flex justify-between"><span className="text-gray-600">Annual Fee</span><span className="font-medium">PKR {Number(watchedValues.annualFee).toLocaleString()}</span></div>}
                       {Number(watchedValues.transportFee)  > 0 && <div className="flex justify-between"><span className="text-gray-600">Transport Fee</span><span className="font-medium">PKR {Number(watchedValues.transportFee).toLocaleString()}</span></div>}
+                      {Number(watchedValues.booksFee)      > 0 && <div className="flex justify-between"><span className="text-gray-600">Books Fee</span><span className="font-medium">PKR {Number(watchedValues.booksFee).toLocaleString()}</span></div>}
                       {customFees.filter(f => Number(f.amount) > 0 && f.name).map(f => (
                         <div key={f.id} className="flex justify-between">
                           <span className="text-gray-600">{f.name}</span>
