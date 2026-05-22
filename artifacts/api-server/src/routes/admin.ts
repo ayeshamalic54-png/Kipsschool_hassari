@@ -2,7 +2,8 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   studentsTable, feesTable, attendanceTable, examsTable, examResultsTable,
-  staffTable, salariesTable, accountEntriesTable, certificatesTable, classesTable, usersTable
+  staffTable, salariesTable, accountEntriesTable, certificatesTable, classesTable, usersTable,
+  feeStructuresTable, settingsTable
 } from "@workspace/db";
 import { sql, eq } from "drizzle-orm";
 import { requireAuth, hashPassword } from "../lib/auth";
@@ -43,7 +44,7 @@ function sanitizeRow(row: Record<string, unknown>): Record<string, unknown> {
 }
 
 async function collectAllData() {
-  const [students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users] = await Promise.all([
+  const [students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings] = await Promise.all([
     db.select().from(studentsTable),
     db.select().from(feesTable),
     db.select().from(attendanceTable),
@@ -55,8 +56,10 @@ async function collectAllData() {
     db.select().from(certificatesTable),
     db.select().from(classesTable),
     db.select({ id: usersTable.id, username: usersTable.username, name: usersTable.name, role: usersTable.role, email: usersTable.email }).from(usersTable),
+    db.select().from(feeStructuresTable),
+    db.select().from(settingsTable),
   ]);
-  return { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users };
+  return { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings };
 }
 
 // GET /api/admin/backup
@@ -314,6 +317,29 @@ async function performRestore(
       }
     }
     await db.execute(sql.raw(`SELECT setval('certificates_id_seq', COALESCE((SELECT MAX(id) FROM "certificates"), 0) + 1, false)`));
+  }
+
+  // 12. Fee Structures
+  if (backupData.feeStructures?.length) {
+    for (const f of backupData.feeStructures) {
+      try {
+        await db.insert(feeStructuresTable).values(sanitizeRow(f) as any).onConflictDoNothing();
+      } catch (e: unknown) {
+        errors.push(`feeStructure ${f.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    await db.execute(sql.raw(`SELECT setval('fee_structures_id_seq', COALESCE((SELECT MAX(id) FROM "fee_structures"), 0) + 1, false)`));
+  }
+
+  // 13. Settings
+  if (backupData.settings?.length) {
+    for (const s of backupData.settings) {
+      try {
+        await db.insert(settingsTable).values(sanitizeRow(s) as any).onConflictDoNothing();
+      } catch (e: unknown) {
+        errors.push(`settings ${s.id}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
   }
 }
 
