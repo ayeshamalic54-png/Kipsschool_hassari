@@ -728,7 +728,7 @@
 
                       <div className="space-y-6">
                         {/* Header */}
-                        <div className="flex items-center justify-between">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                           <div>
                             <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
                             <p className="text-gray-500 text-sm mt-1">
@@ -850,7 +850,7 @@
                                   <Card className="overflow-hidden border-0 shadow-sm">
                                     <CardContent className="p-0">
                                       <div className={`bg-gradient-to-br ${card.gradient} p-4`}>
-                                        <div className="flex items-center justify-between">
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                           <div>
                                             <p className="text-white/80 text-xs font-medium uppercase tracking-wide">{card.label}</p>
                                             {isLoading
