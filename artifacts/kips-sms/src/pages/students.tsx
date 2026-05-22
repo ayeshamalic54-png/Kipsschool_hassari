@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { useListStudents, useDeleteStudent, getListStudentsQueryKey } from "@workspace/api-client-react";
+import { useListStudents, useDeleteStudent, getListStudentsQueryKey, ListStudentsParams } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,7 +55,7 @@ export default function Students() {
   if (statusFilter) filterParams.status = statusFilter;
   if (classId) filterParams.classId = Number(classId);
 
-  const { data: students, isLoading } = useListStudents(filterParams as { search?: string; status?: "active" | "inactive" | "left" });
+  const { data: students, isLoading } = useListStudents(filterParams as ListStudentsParams);
   const deleteMutation = useDeleteStudent();
 
   const filteredStudents = section
