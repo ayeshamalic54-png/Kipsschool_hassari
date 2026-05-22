@@ -26,6 +26,25 @@ const STATUS_COLORS: Record<string, string> = {
   left:     "bg-red-100 text-red-600",
 };
 
+// Fee record type from API
+interface FeeRecord {
+  id: number;
+  amount: number;
+  paidAmount: number;
+  month: string;
+  notes: string | null;
+  status: string;
+}
+
+// Known fee categories by notes keywords
+const FEE_CATEGORIES = [
+  { key: "admission", label: "Admission Fee",  match: /admission/i },
+  { key: "exam",      label: "Exam Fee",       match: /exam/i },
+  { key: "annual",    label: "Annual Fee",     match: /annual/i },
+  { key: "transport", label: "Transport Fee",  match: /transport/i },
+  { key: "books",     label: "Books Fee",      match: /books?/i },
+];
+
 export default function StudentDetail() {
   const [, params]      = useRoute("/students/:id");
   const [, setLocation] = useLocation();
@@ -35,9 +54,12 @@ export default function StudentDetail() {
   const fileRef         = useRef<HTMLInputElement>(null);
 
   const [mode, setMode]             = useState<"view"|"edit">("view");
-  const [photoPreview, setPhotoPreview] = useState<string|null>(null);   // base64 preview
+  const [photoPreview, setPhotoPreview] = useState<string|null>(null);
   const [photoFile, setPhotoFile]   = useState<File|null>(null);
   const [saving, setSaving]         = useState(false);
+
+  // Student fee records (fetched separately)
+  const [feeRecords, setFeeRecords] = useState<FeeRecord[]>([]);
 
   const [f, setF] = useState({
     name:"", fatherName:"", motherName:"", dateOfBirth:"",
@@ -70,10 +92,19 @@ export default function StudentDetail() {
       feeAmount:        s.feeAmount        ? String(s.feeAmount) : "",
       status:           s.status           ?? "active",
     });
-    // Reset any staged photo when student reloads
     setPhotoPreview(null);
     setPhotoFile(null);
   }, [student]);
+
+  /* Fetch fee records for this student */
+  useEffect(() => {
+    if (!studentId) return;
+    const headers = authHeader();
+    fetch(`/api/fees?studentId=${studentId}`, { headers })
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: FeeRecord[]) => setFeeRecords(rows))
+      .catch(() => setFeeRecords([]));
+  }, [studentId]);
 
   /* Image file selected */
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,7 +121,6 @@ export default function StudentDetail() {
     if (!f.name.trim()) { toast({ variant:"destructive", title:"Name is required" }); return; }
     setSaving(true);
     try {
-      /* 1) Upload new photo first */
       if (photoFile) {
         const fd = new FormData();
         fd.append("image", photoFile);
@@ -102,7 +132,6 @@ export default function StudentDetail() {
         if (!res.ok) toast({ variant:"destructive", title:"Photo upload failed — other changes will still save" });
       }
 
-      /* 2) Update student fields */
       await updateMut.mutateAsync({
         id: studentId,
         data: {
@@ -124,7 +153,7 @@ export default function StudentDetail() {
 
       await qc.invalidateQueries({ queryKey: getGetStudentQueryKey(studentId) });
       await qc.invalidateQueries({ queryKey: getListStudentsQueryKey() });
-      toast({ title: "✅ Student updated successfully" });
+      toast({ title: "Student updated successfully" });
       setPhotoPreview(null);
       setPhotoFile(null);
       setMode("view");
@@ -134,6 +163,48 @@ export default function StudentDetail() {
       setSaving(false);
     }
   };
+
+  /* Build categorized fee breakdown from fee records */
+  const buildFeeBreakdown = () => {
+    const breakdown: { label: string; amount: number; paid: number; status: string }[] = [];
+
+    for (const cat of FEE_CATEGORIES) {
+      const matching = feeRecords.filter(r => r.notes && cat.match.test(r.notes));
+      if (matching.length > 0) {
+        const totalAmount = matching.reduce((s, r) => s + Number(r.amount), 0);
+        const totalPaid   = matching.reduce((s, r) => s + Number(r.paidAmount), 0);
+        const anyUnpaid   = matching.some(r => r.status !== "paid");
+        breakdown.push({
+          label:  cat.label,
+          amount: totalAmount,
+          paid:   totalPaid,
+          status: anyUnpaid ? "unpaid" : "paid",
+        });
+      }
+    }
+
+    // Other/custom fees not in known categories
+    const knownMatchers = FEE_CATEGORIES.map(c => c.match);
+    const others = feeRecords.filter(r =>
+      !r.notes || !knownMatchers.some(m => r.notes && m.test(r.notes))
+    );
+    for (const o of others) {
+      if (Number(o.amount) > 0) {
+        breakdown.push({
+          label:  o.notes || "Other Fee",
+          amount: Number(o.amount),
+          paid:   Number(o.paidAmount),
+          status: o.status,
+        });
+      }
+    }
+
+    return breakdown;
+  };
+
+  const feeBreakdown = buildFeeBreakdown();
+  const totalFeeRecordsAmount = feeBreakdown.reduce((s, r) => s + r.amount, 0);
+  const totalFeePaid          = feeBreakdown.reduce((s, r) => s + r.paid, 0);
 
   /* ─── Loading / not found ─────────────────────────────────────────────── */
   if (isLoading) {
@@ -156,9 +227,6 @@ export default function StudentDetail() {
 
   const s = student as any;
 
-  /* Decide which photo to show:
-     - in edit mode: staged preview → existing imageUrl → null
-     - in view mode: existing imageUrl → null                       */
   const displayPhoto = mode === "edit"
     ? (photoPreview ?? s.imageUrl ?? null)
     : (s.imageUrl ?? null);
@@ -208,7 +276,6 @@ export default function StudentDetail() {
           {/* Photo + summary */}
           <Card>
             <CardContent className="pt-5 flex items-center gap-5">
-              {/* PHOTO */}
               <div className="w-24 h-24 rounded-full border-2 border-indigo-200 overflow-hidden bg-indigo-50 flex items-center justify-center shrink-0">
                 {displayPhoto
                   ? <img src={displayPhoto} alt={s.name} className="w-full h-full object-cover"
@@ -294,6 +361,53 @@ export default function StudentDetail() {
               </Card>
             </div>
           </div>
+
+          {/* ── Fee Breakdown ──────────────────────────────────────────────── */}
+          {feeBreakdown.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Fee Breakdown (Admission Fees)</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 text-xs text-gray-500 font-semibold">Fee Type</th>
+                      <th className="text-right py-2 text-xs text-gray-500 font-semibold">Amount</th>
+                      <th className="text-right py-2 text-xs text-gray-500 font-semibold">Paid</th>
+                      <th className="text-right py-2 text-xs text-gray-500 font-semibold">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feeBreakdown.map((row, i) => (
+                      <tr key={i} className="border-b last:border-0">
+                        <td className="py-2 text-gray-700">{row.label}</td>
+                        <td className="py-2 text-right font-medium text-gray-900">PKR {row.amount.toLocaleString()}</td>
+                        <td className="py-2 text-right text-emerald-700">PKR {row.paid.toLocaleString()}</td>
+                        <td className="py-2 text-right">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            row.status === "paid" ? "bg-emerald-100 text-emerald-700" :
+                            row.status === "partial" ? "bg-yellow-100 text-yellow-700" :
+                            "bg-red-100 text-red-600"
+                          }`}>
+                            {row.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-gray-200">
+                      <td className="py-2 font-bold text-gray-800">Total</td>
+                      <td className="py-2 text-right font-bold text-gray-900">PKR {totalFeeRecordsAmount.toLocaleString()}</td>
+                      <td className="py-2 text-right font-bold text-emerald-700">PKR {totalFeePaid.toLocaleString()}</td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
@@ -309,7 +423,6 @@ export default function StudentDetail() {
               <CardTitle className="text-sm">Student Photo</CardTitle>
             </CardHeader>
             <CardContent className="flex items-center gap-5">
-              {/* Photo circle */}
               <div className="relative shrink-0">
                 <div className="w-24 h-24 rounded-full border-2 border-indigo-300 overflow-hidden bg-indigo-50 flex items-center justify-center">
                   {displayPhoto
@@ -318,36 +431,26 @@ export default function StudentDetail() {
                         onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     : <User className="w-10 h-10 text-indigo-300" />}
                 </div>
-                {/* Camera button overlay */}
                 <button type="button" onClick={() => fileRef.current?.click()}
                   className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center shadow-lg transition-colors">
                   <Camera className="w-4 h-4" />
                 </button>
               </div>
 
-              {/* Right side text */}
               <div className="flex-1 min-w-0">
-                {displayPhoto
-                  ? (
-                    <div>
-                      <p className="text-sm font-medium text-gray-700 mb-1">
-                        {photoFile ? `Nai photo: ${photoFile.name}` : "Mौjuda photo موجود ہے"}
-                      </p>
-                      <p className="text-xs text-gray-400 mb-3">
-                        Change karna chahain toh neeche click karein
-                      </p>
-                    </div>
-                  )
-                  : (
-                    <div>
-                      <p className="text-sm font-medium text-gray-500 mb-1">
-                        Koi photo nahi hai
-                      </p>
-                      <p className="text-xs text-gray-400 mb-3">
-                        Student ki photo upload karein
-                      </p>
-                    </div>
-                  )}
+                {displayPhoto ? (
+                  <div>
+                    <p className="text-sm font-medium text-gray-700 mb-1">
+                      {photoFile ? `Nai photo: ${photoFile.name}` : "Mौjuda photo موجود ہے"}
+                    </p>
+                    <p className="text-xs text-gray-400 mb-3">Change karna chahain toh neeche click karein</p>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-sm font-medium text-gray-500 mb-1">Koi photo nahi hai</p>
+                    <p className="text-xs text-gray-400 mb-3">Student ki photo upload karein</p>
+                  </div>
+                )}
                 <div className="flex gap-2 flex-wrap">
                   <Button type="button" variant="outline" size="sm"
                     onClick={() => fileRef.current?.click()}
@@ -441,6 +544,44 @@ export default function StudentDetail() {
               </Field>
             </CardContent>
           </Card>
+
+          {/* ── Fee Breakdown (from admission) ──────────────────────────── */}
+          {feeBreakdown.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm">Fee Breakdown (Admission Fees)</CardTitle>
+                <p className="text-xs text-gray-400 mt-0.5">Ye fees admission ke waqt record ki gayi hain</p>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-2">
+                  {feeBreakdown.map((row, i) => (
+                    <div key={i} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{row.label}</p>
+                        <p className="text-xs text-gray-400">
+                          Paid: PKR {row.paid.toLocaleString()} / PKR {row.amount.toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-bold text-gray-900">PKR {row.amount.toLocaleString()}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          row.status === "paid"    ? "bg-emerald-100 text-emerald-700" :
+                          row.status === "partial" ? "bg-yellow-100 text-yellow-700" :
+                          "bg-red-100 text-red-600"
+                        }`}>
+                          {row.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-between items-center mt-3 pt-3 border-t-2 border-gray-200">
+                  <span className="text-sm font-bold text-gray-800">Total Admission Fees</span>
+                  <span className="text-base font-bold text-gray-900">PKR {totalFeeRecordsAmount.toLocaleString()}</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* ── Action buttons ─────────────────────────────────────────────── */}
           <div className="flex gap-3 justify-end">
