@@ -565,7 +565,7 @@ export default function Salaries() {
 
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Salaries</h1>
             <p className="text-gray-500 text-sm mt-1">Staff salary management & payslips with deductions</p>
@@ -612,7 +612,7 @@ export default function Salaries() {
         </div>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
             { label: "Total Records", value: (salaries?.length ?? 0).toString(),          gradient: "from-blue-500 to-cyan-500" },
             { label: "Total Paid",    value: `PKR ${totalPaid.toLocaleString()}`,    gradient: "from-emerald-500 to-green-500" },
