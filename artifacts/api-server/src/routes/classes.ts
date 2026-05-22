@@ -29,7 +29,9 @@ router.get("/", requireAuth, async (req, res) => {
 // POST /api/classes
 router.post("/", requireAuth, async (req, res) => {
   try {
-    const [cls] = await db.insert(classesTable).values(req.body).returning();
+    const body = { ...req.body };
+    if (!body.grade && body.name) body.grade = body.name;
+    const [cls] = await db.insert(classesTable).values(body).returning();
     res.status(201).json({ ...cls, studentCount: 0, teacherName: null });
   } catch (err) {
     req.log.error(err);
