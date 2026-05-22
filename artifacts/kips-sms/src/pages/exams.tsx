@@ -371,7 +371,7 @@ function AdminResultsView({ examId, exam, students, onAdded }: {
     <div className="space-y-4">
       {/* Stats */}
       {results.length > 0 && (
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {[
             { label: "Total",     value: totalStudents, gradient: "from-blue-500 to-cyan-500"     },
             { label: "Passed",    value: passed,        gradient: "from-emerald-500 to-green-500" },
@@ -706,7 +706,7 @@ export default function Exams() {
 
       {/* Student summary cards */}
       {isStudent && exams && exams.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {[
             { label: "Total Exams",  value: exams.length,                                                 gradient: "from-violet-500 to-fuchsia-500", icon: FileText  },
             { label: "Subjects",     value: new Set(exams.map(e => e.subject)).size,                      gradient: "from-blue-500 to-cyan-500",       icon: BookOpen  },
