@@ -355,7 +355,7 @@ function FeeStructureTab({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-800">Fee Structure</h2>
           <p className="text-sm text-gray-500">Standard monthly fee per class — auto-fills when creating fee records</p>
@@ -846,7 +846,7 @@ export default function Fees() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between no-print">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 no-print">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Fee Management</h1>
           <p className="text-gray-500 text-sm mt-1">Manage fee records and payments</p>
