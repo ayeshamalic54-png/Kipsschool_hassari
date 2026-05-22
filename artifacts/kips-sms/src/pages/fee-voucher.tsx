@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useListStudents, useListClasses, useListFees } from "@workspace/api-client-react";
+import { useState, useEffect } from "react";
+import { useListStudents, useListClasses } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -14,6 +14,20 @@ interface VoucherEdit {
   note: string;
 }
 
+interface FeeStructure {
+  id: number;
+  classId: number;
+  monthlyFee: number;
+  admissionFee: number;
+  examFee: number;
+  libraryFee: number;
+  transportFee: number;
+}
+
+function getToken(): string {
+  return localStorage.getItem("token") ?? localStorage.getItem("kips_token") ?? "";
+}
+
 export default function FeeVoucher() {
   const [selectedClass, setSelectedClass] = useState<string>("");
   const [month, setMonth] = useState<string>(new Date().toISOString().slice(0, 7));
@@ -25,13 +39,37 @@ export default function FeeVoucher() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<VoucherEdit>({ feeOverride: "", fine: "", discount: "", note: "" });
 
+  // Fee structures from the Fee Structure page
+  const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
+  const [feeStructuresLoading, setFeeStructuresLoading] = useState(false);
+
   const { data: classes } = useListClasses();
   const { data: allStudents } = useListStudents({});
 
-  // Fetch existing fee records for the selected month to use as base fee amounts
-  const { data: feeRecords } = useListFees(
-    month ? { month } : {}
-  );
+  // Fetch fee structures on mount
+  useEffect(() => {
+    const token = getToken();
+    setFeeStructuresLoading(true);
+    fetch("/api/fee-structures", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.ok ? r.json() : [])
+      .then((rows: Record<string, unknown>[]) => {
+        setFeeStructures(rows.map(r => ({
+          id:           Number(r.id),
+          classId:      Number(r.classId),
+          monthlyFee:   Number(r.monthlyFee   ?? 0),
+          admissionFee: Number(r.admissionFee ?? 0),
+          examFee:      Number(r.examFee      ?? 0),
+          libraryFee:   Number(r.libraryFee   ?? 0),
+          transportFee: Number(r.transportFee ?? 0),
+        })));
+      })
+      .catch(() => setFeeStructures([]))
+      .finally(() => setFeeStructuresLoading(false));
+  }, []);
+
+  const feeStructureMap = Object.fromEntries(feeStructures.map(f => [f.classId, f]));
 
   const classStudents = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
   const selectedClassName = classes?.find(c => String(c.id) === selectedClass)?.name ?? "";
@@ -41,11 +79,14 @@ export default function FeeVoucher() {
 
   const getEdit = (id: number) => edits[id] ?? { feeOverride: "", fine: "", discount: "", note: "" };
 
-  // Get base fee for a student: first check feesTable record for the month, then fall back to student.feeAmount
-  const getBaseFee = (studentId: number, studentFeeAmount: number | null) => {
-    const feeRecord = feeRecords?.find(f => Number((f as unknown as Record<string, unknown>).studentId) === studentId);
-    if (feeRecord && feeRecord.amount) return Number(feeRecord.amount);
-    return Number(studentFeeAmount ?? 0);
+  // Get fee structure for the selected class
+  const selectedFeeStructure = selectedClass ? feeStructureMap[Number(selectedClass)] : undefined;
+
+  // Get base fee for a student from class fee structure, fallback to student.feeAmount
+  const getBaseFee = (student: { classId?: number | null; feeAmount?: number | null }) => {
+    const structure = student.classId ? feeStructureMap[student.classId] : undefined;
+    if (structure && structure.monthlyFee > 0) return structure.monthlyFee;
+    return Number(student.feeAmount ?? 0);
   };
 
   const openEdit = (id: number, baseFee: number) => {
@@ -59,12 +100,12 @@ export default function FeeVoucher() {
     setEditingId(null);
   };
 
-  const calcTotal = (id: number, baseFee: number) => {
+  const calcTotal = (id: number, baseFee: number, transport: number) => {
     const e = getEdit(id);
     const fee = Number(e.feeOverride || baseFee);
     const fine = Number(e.fine || 0);
     const disc = Number(e.discount || 0);
-    return Math.max(0, fee + fine - disc);
+    return Math.max(0, fee + transport + fine - disc);
   };
 
   return (
@@ -74,7 +115,7 @@ export default function FeeVoucher() {
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
             <ReceiptText className="w-6 h-6 text-teal-600" /> Fee Voucher — By Class
           </h1>
-          <p className="text-gray-500 text-sm mt-1">Generate and edit fee vouchers before printing</p>
+          <p className="text-gray-500 text-sm mt-1">Generate and print fee vouchers using Fee Structure rates</p>
         </div>
       </div>
 
@@ -100,6 +141,36 @@ export default function FeeVoucher() {
               <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
             </div>
           </div>
+
+          {/* Fee structure preview for selected class */}
+          {selectedClass && (
+            <div className="mt-4 p-3 rounded-lg border bg-blue-50 border-blue-200">
+              {feeStructuresLoading ? (
+                <p className="text-sm text-blue-600">Fee structure load ho rahi hai…</p>
+              ) : selectedFeeStructure ? (
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <span className="font-semibold text-blue-800">Fee Structure ({selectedClassName}):</span>
+                  {selectedFeeStructure.monthlyFee > 0 && (
+                    <span className="text-gray-700">Monthly: <strong>PKR {selectedFeeStructure.monthlyFee.toLocaleString()}</strong></span>
+                  )}
+                  {selectedFeeStructure.transportFee > 0 && (
+                    <span className="text-gray-700">Transport: <strong>PKR {selectedFeeStructure.transportFee.toLocaleString()}</strong></span>
+                  )}
+                  {selectedFeeStructure.examFee > 0 && (
+                    <span className="text-gray-700">Exam: <strong>PKR {selectedFeeStructure.examFee.toLocaleString()}</strong></span>
+                  )}
+                  {selectedFeeStructure.libraryFee > 0 && (
+                    <span className="text-gray-700">Annual: <strong>PKR {selectedFeeStructure.libraryFee.toLocaleString()}</strong></span>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-amber-700">
+                  ⚠️ Is class ki fee structure set nahi hai. Pehle <strong>Fee Structure</strong> page par fees enter karein.
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="mt-4 flex gap-2 items-center flex-wrap">
             <Button
               disabled={!selectedClass || !month}
@@ -112,16 +183,6 @@ export default function FeeVoucher() {
               <Button variant="outline" onClick={() => window.print()}>
                 <Printer className="w-4 h-4 mr-2" /> Print All
               </Button>
-            )}
-            {month && feeRecords && feeRecords.length > 0 && (
-              <span className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 rounded-full px-3 py-1">
-                {feeRecords.length} fee record(s) loaded for {monthLabel}
-              </span>
-            )}
-            {month && feeRecords && feeRecords.length === 0 && (
-              <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
-                No fee records for {monthLabel} — using per-student fee amounts
-              </span>
             )}
           </div>
         </CardContent>
@@ -191,16 +252,16 @@ export default function FeeVoucher() {
       {generated && classStudents.length > 0 && (
         <div className="space-y-0" id="vouchers">
           {classStudents.map((student, idx) => {
-            const baseFee = getBaseFee(student.id, student.feeAmount ?? null);
-            const e = getEdit(student.id);
-            const fee = Number(e.feeOverride || baseFee);
-            const fine = Number(e.fine || 0);
-            const disc = Number(e.discount || 0);
-            const total = calcTotal(student.id, baseFee);
-            const hasEdits = e.feeOverride || e.fine || e.discount || e.note;
-
-            // Check if fee came from fee records
-            const hasFeeRecord = feeRecords?.some(f => Number((f as unknown as Record<string, unknown>).studentId) === student.id);
+            const structure = student.classId ? feeStructureMap[student.classId] : undefined;
+            const baseFee  = getBaseFee(student);
+            const transport = structure?.transportFee ?? 0;
+            const e         = getEdit(student.id);
+            const fee       = Number(e.feeOverride || baseFee);
+            const fine      = Number(e.fine  || 0);
+            const disc      = Number(e.discount || 0);
+            const total     = calcTotal(student.id, baseFee, transport);
+            const hasEdits  = e.feeOverride || e.fine || e.discount || e.note;
+            const fromStructure = !!structure && structure.monthlyFee > 0;
 
             return (
               <div
@@ -264,12 +325,18 @@ export default function FeeVoucher() {
                     <tr className="border-b">
                       <td className="py-2 px-3">
                         Monthly Tuition Fee
-                        {hasFeeRecord && !hasEdits && (
-                          <span className="ml-2 text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 no-print">from records</span>
+                        {fromStructure && !hasEdits && (
+                          <span className="ml-2 text-[10px] text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 no-print">fee structure</span>
                         )}
                       </td>
                       <td className="py-2 px-3 text-right font-semibold">{fee.toLocaleString()}</td>
                     </tr>
+                    {transport > 0 && (
+                      <tr className="border-b">
+                        <td className="py-2 px-3 text-blue-700">Transport Fee</td>
+                        <td className="py-2 px-3 text-right text-blue-700 font-semibold">{transport.toLocaleString()}</td>
+                      </tr>
+                    )}
                     {fine > 0 && (
                       <tr className="border-b">
                         <td className="py-2 px-3 text-red-600">Fine / Late Charges</td>
