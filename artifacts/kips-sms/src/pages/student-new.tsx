@@ -286,16 +286,14 @@ export default function StudentNew() {
       },
       {
         onSuccess: async (student) => {
-          // Upload image if selected
-          if (imageFile && student.id) {
+          // Photo as base64 directly into DB — no filesystem needed on Render
+          if (imagePreview && student.id) {
             setUploadingImage(true);
             try {
-              const formData = new FormData();
-              formData.append("image", imageFile);
-              await fetch(`/api/students/${student.id}/image`, {
-                method: "POST",
-                headers: authHeader() as HeadersInit,
-                body: formData,
+              await fetch(`/api/students/${student.id}`, {
+                method: "PATCH",
+                headers: { ...authHeader(), "Content-Type": "application/json" } as HeadersInit,
+                body: JSON.stringify({ imageUrl: imagePreview }),
               });
             } catch {
               toast({ variant: "destructive", title: "Student created but photo upload failed" });
@@ -813,3 +811,4 @@ export default function StudentNew() {
     </div>
   );
 }
+
