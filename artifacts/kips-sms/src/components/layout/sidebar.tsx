@@ -5,32 +5,33 @@ import { useSchoolInfo } from "@/lib/school-info";
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, CalendarCheck, FileText,
   Users2, Wallet, PieChart, Award, FileBarChart, LogOut, AlertTriangle,
-  ReceiptText, ClipboardList, Settings,
+  ReceiptText, ClipboardList, Settings, LayoutList,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-const NAVY = "#1a2a5e";
+const NAVY   = "#1a2a5e";
 const ORANGE = "#e07b1a";
 
 const getNavigation = (role?: string) => {
   const allRoutes = [
-    { name: "Dashboard",     href: "/dashboard",       icon: LayoutDashboard, gradient: "from-pink-500 to-rose-500",    roles: ["admin", "teacher", "student"] },
-    { name: "Students",      href: "/students",         icon: Users,           gradient: "from-blue-500 to-cyan-500",    roles: ["admin", "teacher"] },
-    { name: "Classes",       href: "/classes",          icon: BookOpen,        gradient: "from-indigo-500 to-purple-500",roles: ["admin", "teacher"] },
-    { name: "Fees",          href: "/fees",             icon: CreditCard,      gradient: "from-emerald-500 to-green-500",roles: ["admin", "student"] },
-    { name: "Fee Voucher",   href: "/fees/voucher",     icon: ReceiptText,     gradient: "from-teal-500 to-cyan-500",    roles: ["admin"] },
-    { name: "Fee Defaulters",href: "/fees/defaulters",  icon: AlertTriangle,   gradient: "from-red-500 to-rose-600",     roles: ["admin"] },
-    { name: "Arrears",       href: "/arrears",          icon: ClipboardList,   gradient: "from-orange-500 to-amber-500", roles: ["admin"] },
-    { name: "Attendance",    href: "/attendance",       icon: CalendarCheck,   gradient: "from-amber-400 to-orange-500", roles: ["admin", "teacher", "student"] },
-    { name: "Exams",         href: "/exams",            icon: FileText,        gradient: "from-violet-500 to-fuchsia-500",roles: ["admin", "teacher", "student"] },
-    { name: "Staff",         href: "/staff",            icon: Users2,          gradient: "from-teal-400 to-emerald-500", roles: ["admin"] },
-    { name: "Salaries",      href: "/salaries",         icon: Wallet,          gradient: "from-cyan-500 to-blue-600",    roles: ["admin"] },
-    { name: "Accounts",      href: "/accounts",         icon: PieChart,        gradient: "from-purple-500 to-indigo-600",roles: ["admin"] },
-    { name: "Certificates",  href: "/certificates",     icon: Award,           gradient: "from-yellow-400 to-amber-500", roles: ["admin"] },
-    { name: "Reports",       href: "/reports",          icon: FileBarChart,    gradient: "from-slate-600 to-slate-800",  roles: ["admin"] },
-    { name: "Settings",      href: "/settings",         icon: Settings,        gradient: "from-gray-500 to-gray-700",    roles: ["admin"] },
+    { name: "Dashboard",      href: "/dashboard",       icon: LayoutDashboard, gradient: "from-pink-500 to-rose-500",     roles: ["admin", "teacher", "student"] },
+    { name: "Students",       href: "/students",        icon: Users,           gradient: "from-blue-500 to-cyan-500",     roles: ["admin", "teacher"] },
+    { name: "Classes",        href: "/classes",         icon: BookOpen,        gradient: "from-indigo-500 to-purple-500", roles: ["admin", "teacher"] },
+    { name: "Fees",           href: "/fees",            icon: CreditCard,      gradient: "from-emerald-500 to-green-500", roles: ["admin", "student"] },
+    { name: "Fee Structure",  href: "/fee-structure",   icon: LayoutList,      gradient: "from-sky-500 to-blue-600",      roles: ["admin"] },
+    { name: "Fee Voucher",    href: "/fees/voucher",    icon: ReceiptText,     gradient: "from-teal-500 to-cyan-500",     roles: ["admin"] },
+    { name: "Fee Defaulters", href: "/fees/defaulters", icon: AlertTriangle,   gradient: "from-red-500 to-rose-600",      roles: ["admin"] },
+    { name: "Arrears",        href: "/arrears",         icon: ClipboardList,   gradient: "from-orange-500 to-amber-500",  roles: ["admin"] },
+    { name: "Attendance",     href: "/attendance",      icon: CalendarCheck,   gradient: "from-amber-400 to-orange-500",  roles: ["admin", "teacher", "student"] },
+    { name: "Exams",          href: "/exams",           icon: FileText,        gradient: "from-violet-500 to-fuchsia-500",roles: ["admin", "teacher", "student"] },
+    { name: "Staff",          href: "/staff",           icon: Users2,          gradient: "from-teal-400 to-emerald-500",  roles: ["admin"] },
+    { name: "Salaries",       href: "/salaries",        icon: Wallet,          gradient: "from-cyan-500 to-blue-600",     roles: ["admin"] },
+    { name: "Accounts",       href: "/accounts",        icon: PieChart,        gradient: "from-purple-500 to-indigo-600", roles: ["admin"] },
+    { name: "Certificates",   href: "/certificates",    icon: Award,           gradient: "from-yellow-400 to-amber-500",  roles: ["admin"] },
+    { name: "Reports",        href: "/reports",         icon: FileBarChart,    gradient: "from-slate-600 to-slate-800",   roles: ["admin"] },
+    { name: "Settings",       href: "/settings",        icon: Settings,        gradient: "from-gray-500 to-gray-700",     roles: ["admin"] },
   ];
   return allRoutes.filter(route => !role || route.roles.includes(role));
 };
@@ -62,7 +63,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           {navigation.map((item) => {
             const isActive =
               location === item.href ||
-              (item.href !== "/fees" && location.startsWith(item.href + "/")) ||
+              (item.href === "/fee-structure" && location === "/fee-structure") ||
+              (item.href !== "/fees" && item.href !== "/fee-structure" && location.startsWith(item.href + "/")) ||
               (item.href === "/fees" && location === "/fees") ||
               (item.href === "/students" && location.startsWith("/students"));
 
