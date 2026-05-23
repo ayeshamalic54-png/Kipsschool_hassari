@@ -17,6 +17,7 @@ import FeeStructure from "@/pages/fee-structure";
 import FeeDefaulters from "@/pages/fee-defaulters";
 import FeeVoucher from "@/pages/fee-voucher";
 import Arrears from "@/pages/arrears";
+import ContactList from "@/pages/contact-list";
 import Attendance from "@/pages/attendance";
 import Exams from "@/pages/exams";
 import Staff from "@/pages/staff";
@@ -41,6 +42,7 @@ function AuthenticatedRoutes() {
       <Switch>
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/students/new" component={StudentNew} />
+        <Route path="/students/contacts" component={ContactList} />
         <Route path="/students/:id" component={StudentDetail} />
         <Route path="/students" component={Students} />
         <Route path="/classes" component={Classes} />
