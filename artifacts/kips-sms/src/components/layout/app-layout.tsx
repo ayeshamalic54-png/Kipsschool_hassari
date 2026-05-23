@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Sidebar } from "./sidebar";
-import { ScrollArea } from "../ui/scroll-area";
 import { Menu, X } from "lucide-react";
 import { useSchoolInfo } from "@/lib/school-info";
 
@@ -28,9 +27,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden print:overflow-visible print:h-auto">
-        {/* Mobile top bar with hamburger */}
-        <div className="md:hidden flex items-center gap-3 px-3 py-2 bg-white border-b shadow-sm no-print">
+      {/* Main content column */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center gap-3 px-3 py-2 bg-white border-b shadow-sm no-print flex-shrink-0">
           <button
             onClick={() => setMobileOpen(v => !v)}
             className="p-2 rounded-lg hover:bg-gray-100 active:bg-gray-200"
@@ -42,10 +42,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="font-bold text-sm" style={{ color: "#1a2a5e" }}>{schoolInfo.name}</span>
         </div>
 
-        <ScrollArea className="flex-1 print:overflow-visible">
-          <main id="printable-area" className="p-3 sm:p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full print:p-0 print:max-w-none">
-
-            {/* ── Global print header: hidden on screen, shown centered on every printout ── */}
+        {/* Scrollable content — overflow-auto allows both vertical AND horizontal scroll */}
+        <div className="flex-1 overflow-auto print:overflow-visible">
+          <main
+            id="printable-area"
+            className="p-3 sm:p-6 md:p-8 lg:p-10 max-w-7xl mx-auto w-full print:p-0 print:max-w-none"
+          >
+            {/* Global print header */}
             <div className="print-header hidden">
               <img src={schoolInfo.logoUrl} alt={schoolInfo.name} onError={e => { (e.target as HTMLImageElement).src = "/kips-logo.jpeg"; }} />
               <div className="print-header-text">
@@ -54,12 +57,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <div className="print-header-date">{today}</div>
               </div>
             </div>
-
             {children}
           </main>
-        </ScrollArea>
+        </div>
       </div>
     </div>
   );
 }
-
