@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { studentsTable, classesTable, usersTable } from "@workspace/db";
+import { studentsTable, classesTable, usersTable, feeStructuresTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { requireAuth, hashPassword } from "../lib/auth";
 import multer from "multer";
@@ -129,6 +129,49 @@ router.post("/:id/image", requireAuth, upload.single("image"), async (req, res) 
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Upload failed" });
+  }
+});
+
+// POST /api/students/promote  ← Promote students from one class to next
+router.post("/promote", requireAuth, async (req, res) => {
+  try {
+    const reqUser = (req as AuthReq).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
+    const { fromClassId, toClassId, studentIds, promoteWithArrears } = req.body;
+
+    if (!fromClassId || !toClassId || !Array.isArray(studentIds) || studentIds.length === 0) {
+      res.status(400).json({ error: "fromClassId, toClassId and studentIds are required" });
+      return;
+    }
+
+    // Get the target class fee structure if available
+    const [feeStruct] = await db.select().from(feeStructuresTable).where(eq(feeStructuresTable.classId, Number(toClassId)));
+
+    let promoted = 0;
+    for (const sid of studentIds) {
+      const id = Number(sid);
+      const updates: Record<string, unknown> = { classId: Number(toClassId), updatedAt: new Date() };
+      if (feeStruct?.monthlyFee) {
+        updates.feeAmount = String(feeStruct.monthlyFee);
+      }
+      await db.update(studentsTable).set(updates).where(eq(studentsTable.id, id));
+      promoted++;
+    }
+
+    const [toClass] = await db.select({ name: classesTable.name }).from(classesTable).where(eq(classesTable.id, Number(toClassId)));
+    const [fromClass] = await db.select({ name: classesTable.name }).from(classesTable).where(eq(classesTable.id, Number(fromClassId)));
+
+    res.json({
+      promoted,
+      fromClass: fromClass?.name ?? String(fromClassId),
+      toClass: toClass?.name ?? String(toClassId),
+      feeUpdated: !!feeStruct,
+      newFeeAmount: feeStruct?.monthlyFee ? Number(feeStruct.monthlyFee) : null,
+    });
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 
