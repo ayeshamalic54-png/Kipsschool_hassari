@@ -5,7 +5,7 @@ import { useSchoolInfo } from "@/lib/school-info";
 import {
   LayoutDashboard, Users, BookOpen, CreditCard, CalendarCheck, FileText,
   Users2, Wallet, PieChart, Award, FileBarChart, LogOut, AlertTriangle,
-  ReceiptText, ClipboardList, Settings, LayoutList,
+  ReceiptText, ClipboardList, Settings, LayoutList, PhoneCall,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const getNavigation = (role?: string) => {
   const allRoutes = [
     { name: "Dashboard",      href: "/dashboard",       icon: LayoutDashboard, gradient: "from-pink-500 to-rose-500",     roles: ["admin", "teacher", "student"] },
     { name: "Students",       href: "/students",        icon: Users,           gradient: "from-blue-500 to-cyan-500",     roles: ["admin", "teacher"] },
+    { name: "Contact List",   href: "/students/contacts", icon: PhoneCall,     gradient: "from-sky-400 to-blue-500",      roles: ["admin", "teacher"] },
     { name: "Classes",        href: "/classes",         icon: BookOpen,        gradient: "from-indigo-500 to-purple-500", roles: ["admin", "teacher"] },
     { name: "Fees",           href: "/fees",            icon: CreditCard,      gradient: "from-emerald-500 to-green-500", roles: ["admin", "student"] },
     { name: "Fee Structure",  href: "/fee-structure",   icon: LayoutList,      gradient: "from-sky-500 to-blue-600",      roles: ["admin"] },
