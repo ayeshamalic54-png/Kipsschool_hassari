@@ -48,7 +48,6 @@ router.get("/", requireAuth, async (req, res) => {
     const conditions = [];
 
     if (reqUser.role === "student") {
-      // Look up student by username from JWT
       const [student] = await db
         .select({ id: studentsTable.id })
         .from(studentsTable)
@@ -81,7 +80,7 @@ router.post("/", requireAuth, async (req, res) => {
     if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
     const [fee] = await db
       .insert(feesTable)
-      .values({ ...req.body, paidAmount: "0", status: "unpaid" })
+      .values({ ...req.body, paidAmount: req.body.paidAmount ?? "0", status: req.body.status ?? "unpaid" })
       .returning();
     const enriched = await enrichFee(fee as unknown as Record<string, unknown>);
     res.status(201).json(enriched);
@@ -91,7 +90,7 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/fees/:id  ← Admin: fee record edit karo
+// PUT /api/fees/:id  ← Admin: edit fee record (amount, month, dueDate, fine, notes)
 router.put("/:id", requireAuth, async (req, res) => {
   try {
     const reqUser = (req as AuthReq).user;
@@ -99,7 +98,7 @@ router.put("/:id", requireAuth, async (req, res) => {
     const feeId = Number(req.params.id);
     const [existing] = await db.select().from(feesTable).where(eq(feesTable.id, feeId));
     if (!existing) { res.status(404).json({ error: "Fee not found" }); return; }
-    const { amount, month, dueDate, fine } = req.body;
+    const { amount, month, dueDate, fine, notes } = req.body;
     const [updated] = await db
       .update(feesTable)
       .set({
@@ -107,6 +106,7 @@ router.put("/:id", requireAuth, async (req, res) => {
         month:   month   !== undefined ? String(month)   : existing.month,
         dueDate: dueDate !== undefined ? String(dueDate) : existing.dueDate,
         fine:    fine    !== undefined ? String(fine)    : existing.fine,
+        notes:   notes   !== undefined ? String(notes)   : existing.notes,
       })
       .where(eq(feesTable.id, feeId))
       .returning();
@@ -118,7 +118,7 @@ router.put("/:id", requireAuth, async (req, res) => {
   }
 });
 
-// DELETE /api/fees/:id  ← Admin: fee record delete karo
+// DELETE /api/fees/:id
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
     const reqUser = (req as AuthReq).user;
