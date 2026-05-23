@@ -16,6 +16,7 @@
                 import { zodResolver } from "@hookform/resolvers/zod";
                 import { z } from "zod";
                 import { useToast } from "@/hooks/use-toast";
+                import { useAuthStore } from "@/lib/auth";
                 import {
                   Plus, Loader2, Printer, CheckCircle, XCircle, Clock, Umbrella,
                   Users, TrendingDown, RefreshCw, ClipboardCheck, Trash2,
@@ -569,6 +570,13 @@
                   const { data: students }   = useListStudents({});
                   const { data: staff }      = useListStaff();
                   const markMutation         = useMarkAttendance();
+                  const { user }             = useAuthStore();
+                  const isStudent            = user?.role === "student";
+
+                  // Students should only see the daily attendance tab (read-only)
+                  useEffect(() => {
+                    if (isStudent) setTab("daily");
+                  }, [isStudent]);
 
                   const deleteAttendance = useMutation({
                     mutationFn: async (id: number) => {
@@ -743,7 +751,7 @@
                             <Button variant="outline" size="sm" onClick={() => window.print()}>
                               <Printer className="w-4 h-4 mr-1" /> Print
                             </Button>
-                            {tab === "daily" && (
+                            {tab === "daily" && !isStudent && (
                               <Dialog open={open} onOpenChange={setOpen}>
                                 <DialogTrigger asChild>
                                   <Button className="bg-gradient-to-r from-amber-500 to-orange-500 text-white">
@@ -813,26 +821,30 @@
                           </div>
                         </div>
 
-                        {/* Tab switcher */}
+                        {/* Tab switcher — students only see Daily Attendance */}
                         <div className="flex gap-1 bg-gray-100 p-1 rounded-lg w-fit">
-                          <button
-                            onClick={() => setTab("bulk")}
-                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5 ${tab === "bulk" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
-                          >
-                            <ClipboardCheck className="w-3.5 h-3.5" /> Bulk Mark
-                          </button>
+                          {!isStudent && (
+                            <button
+                              onClick={() => setTab("bulk")}
+                              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5 ${tab === "bulk" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                              <ClipboardCheck className="w-3.5 h-3.5" /> Bulk Mark
+                            </button>
+                          )}
                           <button
                             onClick={() => setTab("daily")}
                             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${tab === "daily" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
                           >
-                            Daily Attendance
+                            {isStudent ? "My Attendance" : "Daily Attendance"}
                           </button>
-                          <button
-                            onClick={() => setTab("deductions")}
-                            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5 ${tab === "deductions" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
-                          >
-                            <TrendingDown className="w-3.5 h-3.5" /> Deduction Report
-                          </button>
+                          {!isStudent && (
+                            <button
+                              onClick={() => setTab("deductions")}
+                              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-1.5 ${tab === "deductions" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}
+                            >
+                              <TrendingDown className="w-3.5 h-3.5" /> Deduction Report
+                            </button>
+                          )}
                         </div>
 
                         {/* ── BULK TAB ── */}
@@ -948,14 +960,16 @@
                                     </span>
                                   </td>
                                   <td className="py-3 px-2">
-                                    <button
-                                      onClick={() => deleteAttendance.mutate(att.id)}
-                                      disabled={deleteAttendance.isPending}
-                                      className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
-                                      title="Delete record"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    {!isStudent && (
+                                      <button
+                                        onClick={() => deleteAttendance.mutate(att.id)}
+                                        disabled={deleteAttendance.isPending}
+                                        className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
+                                        title="Delete record"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
                                   </td>
                                 </tr>
                               );
