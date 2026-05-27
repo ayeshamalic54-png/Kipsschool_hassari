@@ -32,7 +32,7 @@ const FEE_TYPES = [
   { key: "exam",      label: "Exam Fee",       icon: FlaskConical,  light: "bg-orange-50", text: "text-orange-600" },
   { key: "annual",    label: "Annual Charges", icon: BookOpen,      light: "bg-green-50",  text: "text-green-600"  },
   { key: "transport", label: "Transport Fee",  icon: Bus,           light: "bg-rose-50",   text: "text-rose-600"   },
-  { key: "Arrears",    label:"Previous Charges", icon: BookOpen,      light: "bg-green-50",  text: "text-green-600"  },
+  { key: "Arrears",    label:"Previous Arrears", icon: BookOpen,      light: "bg-green-50",  text: "text-green-600"  },
 ] as const;
 
 type FeeKey = typeof FEE_TYPES[number]["key"];
