@@ -22,6 +22,7 @@ router.get("/", requireAuth, async (req, res) => {
       examFee:      toNum(r.examFee),
       libraryFee:   toNum(r.libraryFee),
       transportFee: toNum(r.transportFee),
+      Arrears:      toNum(r.Arrears),
     })));
   } catch (err) {
     req.log.error(err);
@@ -44,6 +45,7 @@ router.get("/class/:classId", requireAuth, async (req, res) => {
       examFee:      toNum(row.examFee),
       libraryFee:   toNum(row.libraryFee),
       transportFee: toNum(row.transportFee),
+      ArrearsFee: toNum(row.ArrearsFee),
     });
   } catch (err) {
     req.log.error(err);
