@@ -27,7 +27,7 @@ import { useSchoolInfo } from "@/lib/school-info";
 import type { FeeRecord } from "@workspace/api-client-react";
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
-function authHeader() {
+function authHeader(): Record<string, string> {
   const token = localStorage.getItem("kips_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
