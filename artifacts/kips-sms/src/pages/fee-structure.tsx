@@ -7,72 +7,56 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
-  BookOpen,
-  DollarSign,
-  GraduationCap,
-  FlaskConical,
-  CalendarDays,
-  Bus,
-  Pencil,
-  Save,
-  LayoutList,
-  Printer,
-  CheckCircle2,
-  Trash2,
+  BookOpen, DollarSign, GraduationCap, FlaskConical,
+  CalendarDays, Bus, Pencil, Save, LayoutList,
+  Printer, CheckCircle2, Trash2, AlertTriangle,
 } from "lucide-react";
 
-// ─── Theme ───────────────────────────────────────────────────────────────────
 const NAVY   = "#1a2a5e";
 const ORANGE = "#e07b1a";
 
-// ─── Fee Types ────────────────────────────────────────────────────────────────
 const FEE_TYPES = [
-  { key: "monthly",   label: "Monthly Fee",    icon: CalendarDays,  light: "bg-blue-50",   text: "text-blue-600"   },
-  { key: "admission", label: "Admission Fee",  icon: GraduationCap, light: "bg-purple-50", text: "text-purple-600" },
-  { key: "exam",      label: "Exam Fee",       icon: FlaskConical,  light: "bg-orange-50", text: "text-orange-600" },
-  { key: "annual",    label: "Annual Charges", icon: BookOpen,      light: "bg-green-50",  text: "text-green-600"  },
-  { key: "transport", label: "Transport Fee",  icon: Bus,           light: "bg-rose-50",   text: "text-rose-600"   },
-  { key: "previous",  label: "Previous Balance", icon: DollarSign,  light: "bg-amber-50",  text: "text-amber-600"  },
+  { key: "monthly",   label: "Monthly Fee",       icon: CalendarDays,  light: "bg-blue-50",   text: "text-blue-600"   },
+  { key: "admission", label: "Admission Fee",      icon: GraduationCap, light: "bg-purple-50", text: "text-purple-600" },
+  { key: "exam",      label: "Exam Fee",           icon: FlaskConical,  light: "bg-orange-50", text: "text-orange-600" },
+  { key: "annual",    label: "Annual Charges",     icon: BookOpen,      light: "bg-green-50",  text: "text-green-600"  },
+  { key: "transport", label: "Transport Fee",      icon: Bus,           light: "bg-rose-50",   text: "text-rose-600"   },
+  { key: "Arrears",   label: "Previous Arrears",   icon: AlertTriangle, light: "bg-red-50",    text: "text-red-600"    },
 ] as const;
 
 type FeeKey = typeof FEE_TYPES[number]["key"];
 
 interface FeeRow {
   id?: number;
-  classId: number;
+  classId:   number;
   monthly:   number;
   admission: number;
   exam:      number;
   annual:    number;
   transport: number;
-  previous:  number;
+  Arrears:   number;
 }
 type FeesMap = Record<number, FeeRow>;
 
-// ─── Auth helpers ─────────────────────────────────────────────────────────────
 function getToken(): string {
   return localStorage.getItem("token") ?? localStorage.getItem("kips_token") ?? "";
 }
-
 function authHeaders(): Record<string, string> {
   const token = getToken();
   return token
     ? { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }
     : { "Content-Type": "application/json" };
 }
-
 function getUserRole(): string {
   try {
     const token = getToken();
     if (!token) return "";
     const payload = JSON.parse(atob(token.split(".")[1]!));
     return payload.role ?? "";
-  } catch {
-    return "";
-  }
+  } catch { return ""; }
 }
 
-// ─── Field mapping: frontend ↔ backend ───────────────────────────────────────
+// FIX: toBackend now includes Arrears field
 function toBackend(fees: Omit<FeeRow, "id">) {
   return {
     classId:      fees.classId,
@@ -81,10 +65,11 @@ function toBackend(fees: Omit<FeeRow, "id">) {
     examFee:      fees.exam,
     libraryFee:   fees.annual,
     transportFee: fees.transport,
-    previousFee:  fees.previous,
+    Arrears:      fees.Arrears,
   };
 }
 
+// FIX: fromBackend now reads Arrears field
 function fromBackend(row: Record<string, unknown>): FeeRow {
   return {
     id:        Number(row.id),
@@ -94,18 +79,13 @@ function fromBackend(row: Record<string, unknown>): FeeRow {
     exam:      Number(row.examFee      ?? 0),
     annual:    Number(row.libraryFee   ?? 0),
     transport: Number(row.transportFee ?? 0),
-    previous:  Number(row.previousFee  ?? 0),
+    Arrears:   Number(row.Arrears      ?? 0),
   };
 }
 
 // ─── Edit/Add Dialog ──────────────────────────────────────────────────────────
 function EditDialog({
-  open,
-  className,
-  grade,
-  initial,
-  onClose,
-  onSave,
+  open, className, grade, initial, onClose, onSave,
 }: {
   open:      boolean;
   className: string;
@@ -143,10 +123,8 @@ function EditDialog({
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-3">
-            <div
-              className="w-9 h-9 rounded-xl flex items-center justify-center shadow"
-              style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}
-            >
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow"
+              style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}>
               <LayoutList className="w-4 h-4 text-white" />
             </div>
             <div>
@@ -164,14 +142,11 @@ function EditDialog({
                 <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${ft.light}`}>
                   <Icon className={`w-4 h-4 ${ft.text}`} />
                 </div>
-                <span className="text-sm font-medium text-gray-700 w-36 flex-shrink-0">
-                  {ft.label}
-                </span>
+                <span className="text-sm font-medium text-gray-700 w-36 flex-shrink-0">{ft.label}</span>
                 <div className="relative flex-1">
                   <span className="absolute left-3 top-2.5 text-xs text-gray-400 font-semibold">PKR</span>
                   <Input
-                    type="number"
-                    min={0}
+                    type="number" min={0}
                     className="pl-12 text-right font-bold"
                     placeholder="0"
                     value={draft[ft.key] ?? ""}
@@ -185,12 +160,9 @@ function EditDialog({
 
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
-          <Button
-            onClick={handleSave}
-            disabled={saving}
+          <Button onClick={handleSave} disabled={saving}
             style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}
-            className="text-white hover:opacity-90"
-          >
+            className="text-white hover:opacity-90">
             <Save className="w-4 h-4 mr-2" />
             {saving ? "Saving..." : "Save"}
           </Button>
@@ -200,12 +172,8 @@ function EditDialog({
   );
 }
 
-// ─── Delete Confirm Dialog ────────────────────────────────────────────────────
 function DeleteDialog({
-  open,
-  className,
-  onClose,
-  onConfirm,
+  open, className, onClose, onConfirm,
 }: {
   open:      boolean;
   className: string;
@@ -217,18 +185,15 @@ function DeleteDialog({
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle style={{ color: "#dc2626" }}>Fee Structure Delete Karein?</DialogTitle>
+          <DialogTitle style={{ color: "#dc2626" }}>Delete Fee Structure?</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-gray-600 py-2">
-          <strong>{className}</strong> ki fee structure database se hata di jayegi.
+          Fee structure for <strong>{className}</strong> will be permanently removed from the database.
         </p>
         <div className="flex justify-end gap-2 pt-2 border-t">
           <Button variant="outline" onClick={onClose} disabled={deleting}>Cancel</Button>
-          <Button
-            variant="destructive"
-            disabled={deleting}
-            onClick={async () => { setDeleting(true); await onConfirm(); setDeleting(false); }}
-          >
+          <Button variant="destructive" disabled={deleting}
+            onClick={async () => { setDeleting(true); await onConfirm(); setDeleting(false); }}>
             <Trash2 className="w-4 h-4 mr-2" />
             {deleting ? "Deleting..." : "Delete"}
           </Button>
@@ -245,19 +210,16 @@ export default function FeeStructure() {
 
   const [feesMap,       setFeesMap]       = useState<FeesMap>({});
   const [loadingFees,   setLoadingFees]   = useState(true);
-
   const [editClassId,   setEditClassId]   = useState<number | null>(null);
   const [editClassName, setEditClassName] = useState("");
   const [editGrade,     setEditGrade]     = useState("");
   const [editOpen,      setEditOpen]      = useState(false);
-
   const [deleteClassId,   setDeleteClassId]   = useState<number | null>(null);
   const [deleteClassName, setDeleteClassName] = useState("");
   const [deleteOpen,      setDeleteOpen]      = useState(false);
 
   const isAdmin = getUserRole() === "admin";
 
-  // ── Database se load ─────────────────────────────────────────────────────
   const loadFromDb = useCallback(async () => {
     try {
       setLoadingFees(true);
@@ -272,7 +234,7 @@ export default function FeeStructure() {
       setFeesMap(map);
     } catch (err) {
       console.error("Fee load error:", err);
-      toast({ title: "Load error", description: "Fee structures load nahi hue.", variant: "destructive" });
+      toast({ title: "Load error", description: "Could not load fee structures.", variant: "destructive" });
     } finally {
       setLoadingFees(false);
     }
@@ -280,7 +242,6 @@ export default function FeeStructure() {
 
   useEffect(() => { loadFromDb(); }, [loadFromDb]);
 
-  // ── Edit open ────────────────────────────────────────────────────────────
   const handleEdit = (classId: number, className: string, grade: string) => {
     setEditClassId(classId);
     setEditClassName(className);
@@ -288,7 +249,7 @@ export default function FeeStructure() {
     setEditOpen(true);
   };
 
-  // ── Save (add or update) ─────────────────────────────────────────────────
+  // FIX: handleSave now includes Arrears in the body sent to backend
   const handleSave = async (fees: Partial<Record<FeeKey, number>>) => {
     if (!editClassId) return;
     try {
@@ -299,7 +260,7 @@ export default function FeeStructure() {
         exam:      fees.exam      ?? 0,
         annual:    fees.annual    ?? 0,
         transport: fees.transport ?? 0,
-        previous:  fees.previous  ?? 0,
+        Arrears:   fees.Arrears   ?? 0,
       });
       const res = await fetch("/api/fee-structures", {
         method:  "POST",
@@ -308,11 +269,11 @@ export default function FeeStructure() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error((err as any).error ?? `HTTP ${res.status}`);
+        throw new Error((err as Record<string, string>).error ?? `HTTP ${res.status}`);
       }
       const saved: Record<string, unknown> = await res.json();
       setFeesMap(prev => ({ ...prev, [editClassId]: fromBackend(saved) }));
-      toast({ title: "Saved!", description: `${editClassName} ki fees database mein save ho gayin.` });
+      toast({ title: "Saved", description: `${editClassName} fee structure updated.` });
       setEditOpen(false);
       setEditClassId(null);
     } catch (err) {
@@ -320,7 +281,6 @@ export default function FeeStructure() {
     }
   };
 
-  // ── Delete ───────────────────────────────────────────────────────────────
   const handleDeleteOpen = (classId: number, className: string) => {
     setDeleteClassId(classId);
     setDeleteClassName(className);
@@ -331,7 +291,6 @@ export default function FeeStructure() {
     if (!deleteClassId) return;
     const existing = feesMap[deleteClassId];
     if (!existing?.id) {
-      // No DB record yet — just clear local state
       setFeesMap(prev => { const n = { ...prev }; delete n[deleteClassId]; return n; });
       setDeleteOpen(false);
       return;
@@ -343,7 +302,7 @@ export default function FeeStructure() {
       });
       if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
       setFeesMap(prev => { const n = { ...prev }; delete n[deleteClassId]; return n; });
-      toast({ title: "Deleted", description: `${deleteClassName} ki fee structure hata di gayi.` });
+      toast({ title: "Deleted", description: `${deleteClassName} fee structure removed.` });
     } catch (err) {
       toast({ title: "Delete failed", description: err instanceof Error ? err.message : "Error", variant: "destructive" });
     } finally {
@@ -361,19 +320,15 @@ export default function FeeStructure() {
 
   return (
     <div className="space-y-6">
-
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md"
-            style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}
-          >
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md"
+            style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}>
             <LayoutList className="w-5 h-5 text-white" />
           </div>
           <div>
             <h1 className="text-2xl font-bold" style={{ color: NAVY }}>Fee Structure</h1>
-            <p className="text-gray-500 text-sm">Har class ki monthly fees yahan set karein</p>
+            <p className="text-gray-500 text-sm">Set monthly fees for each class</p>
           </div>
         </div>
         <Button variant="outline" onClick={() => window.print()} className="no-print">
@@ -418,7 +373,7 @@ export default function FeeStructure() {
         <CardHeader className="pb-2 border-b">
           <CardTitle className="text-base flex items-center gap-2" style={{ color: NAVY }}>
             <DollarSign className="w-4 h-4" style={{ color: ORANGE }} />
-            Class-wise Fee Structure (Monthly)
+            Class-wise Fee Structure
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
@@ -451,37 +406,27 @@ export default function FeeStructure() {
                   {(classes ?? []).map((cls, idx) => {
                     const fees       = feesMap[cls.id];
                     const configured = fees && fees.monthly > 0;
-
                     return (
-                      <tr
-                        key={cls.id}
-                        className="border-b hover:bg-indigo-50/30 transition-colors"
-                        style={{ background: idx % 2 === 0 ? "#fff" : "#fafbff" }}
-                      >
-                        {/* Class name */}
+                      <tr key={cls.id} className="border-b hover:bg-indigo-50/30 transition-colors"
+                        style={{ background: idx % 2 === 0 ? "#fff" : "#fafbff" }}>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2.5">
-                            <div
-                              className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0"
-                              style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}
-                            >
+                            <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0"
+                              style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}>
                               <BookOpen className="w-4 h-4 text-white" />
                             </div>
                             <div>
                               <p className="font-bold text-gray-900">{cls.name}</p>
                               <p className="text-xs text-gray-400">{cls.grade}</p>
                             </div>
-                            {configured && (
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-1 flex-shrink-0" />
-                            )}
+                            {configured && <CheckCircle2 className="w-4 h-4 text-emerald-500 ml-1 flex-shrink-0" />}
                           </div>
                         </td>
 
-                        {/* Fee columns — per month values */}
                         {FEE_TYPES.map(ft => (
                           <td key={ft.key} className="py-3 px-3 text-right">
                             {fees && (fees[ft.key as FeeKey] ?? 0) > 0 ? (
-                              <span className="font-semibold text-gray-800">
+                              <span className={`font-semibold ${ft.key === "Arrears" ? "text-red-600" : "text-gray-800"}`}>
                                 {Number(fees[ft.key as FeeKey]).toLocaleString()}
                               </span>
                             ) : (
@@ -490,27 +435,19 @@ export default function FeeStructure() {
                           </td>
                         ))}
 
-                        {/* Admin actions */}
                         {isAdmin && (
                           <td className="py-3 px-4">
                             <div className="flex items-center justify-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-8 text-xs font-semibold"
+                              <Button size="sm" variant="outline" className="h-8 text-xs font-semibold"
                                 style={{ borderColor: NAVY + "33", color: NAVY }}
-                                onClick={() => handleEdit(cls.id, cls.name, cls.grade ?? "")}
-                              >
+                                onClick={() => handleEdit(cls.id, cls.name, cls.grade ?? "")}>
                                 <Pencil className="w-3 h-3 mr-1" />
                                 {configured ? "Edit" : "Add"}
                               </Button>
                               {configured && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
+                                <Button size="sm" variant="outline"
                                   className="h-8 text-xs font-semibold border-red-200 text-red-600 hover:bg-red-50"
-                                  onClick={() => handleDeleteOpen(cls.id, cls.name)}
-                                >
+                                  onClick={() => handleDeleteOpen(cls.id, cls.name)}>
                                   <Trash2 className="w-3 h-3 mr-1" />
                                   Delete
                                 </Button>
@@ -528,7 +465,6 @@ export default function FeeStructure() {
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
       {editClassId !== null && (
         <EditDialog
           open={editOpen}
@@ -540,7 +476,6 @@ export default function FeeStructure() {
         />
       )}
 
-      {/* Delete Dialog */}
       <DeleteDialog
         open={deleteOpen}
         className={deleteClassName}
