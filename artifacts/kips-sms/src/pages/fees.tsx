@@ -27,7 +27,7 @@ import { useSchoolInfo } from "@/lib/school-info";
 import type { FeeRecord } from "@workspace/api-client-react";
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
-function authHeader(): Record<string, string> {
+function authHeader() {
   const token = localStorage.getItem("kips_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
@@ -177,10 +177,21 @@ export default function Fees() {
   }, []);
 
   // ── Filtered data ─────────────────────────────────────────────────────────
-  const selClassName = classFilter ? classes?.find(c=>String(c.id)===classFilter)?.name : undefined;
   const allFees      = fees ?? [];
+
+  // FIX: Filter by classId (numeric comparison) instead of className string match
   const displayFees  = allFees
-    .filter(f => !selClassName || f.className === selClassName)
+    .filter(f => {
+      if (!classFilter) return true;
+      const fExt = f as unknown as Record<string,unknown>;
+      // Try classId first (most reliable), fall back to className match
+      if (fExt.classId !== undefined && fExt.classId !== null) {
+        return String(fExt.classId) === classFilter;
+      }
+      // Fallback: match by class name
+      const cls = classes?.find(c => String(c.id) === classFilter);
+      return cls ? f.className === cls.name : true;
+    })
     .filter(f => !statusFilter || (statusFilter==="unpaid" ? f.status!=="paid" : f.status===statusFilter))
     .filter(f => {
       const q = searchQ.trim().toLowerCase(); if (!q) return true;
@@ -200,6 +211,8 @@ export default function Fees() {
   // ── Print Portal ──────────────────────────────────────────────────────────
   const TH:React.CSSProperties = { padding:"7px 10px", background:"#1a2a5e", color:"#fff", fontWeight:700, fontSize:9, textAlign:"left", border:"1px solid #3b5998" };
   const TD = (alt:boolean):React.CSSProperties => ({ padding:"6px 10px", border:"1px solid #e5e7eb", fontSize:9, color:"#1f2937", background:alt?"#f0f4ff":"#fff" });
+
+  const selClassName = classFilter ? classes?.find(c=>String(c.id)===classFilter)?.name : undefined;
 
   const printPortal = createPortal(
     <div id="fee-print-portal" style={{ position:"absolute", left:"-99999px", top:"-99999px", fontFamily:"Arial, sans-serif" }}>
@@ -522,7 +535,7 @@ export default function Fees() {
         <div className="text-center py-16 text-gray-400">
           <CreditCard className="w-12 h-12 mx-auto mb-3 text-gray-300"/>
           <p className="font-medium text-gray-500">No fee records found</p>
-          <p className="text-sm mt-1">Filter change karein ya naya record add karein</p>
+          <p className="text-sm mt-1">Change filter or add a new record</p>
         </div>
 
       /* ── CARD VIEW ── */
@@ -573,15 +586,18 @@ export default function Fees() {
                         💳 Pay Now
                       </button>
                     )}
-                    {fee.status==="paid" && (
-                      <button onClick={()=>{
-                        setReceipt({receiptNo:`RCP-${fee.id}`,studentName:fee.studentName??"—",admissionNumber:(ext(fee).admissionNumber as string)??"—",className:fee.className??"—",month:fee.month,amountPaid:fee.paidAmount??0,remaining:0,newStatus:"paid",paidDate:new Date().toLocaleDateString("en-PK",{dateStyle:"long"})});
-                      }} className="flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200">
-                        <Printer className="w-3.5 h-3.5"/> Receipt
-                      </button>
+                    {isAdmin && (
+                      <>
+                        <button onClick={()=>openEditFee(fee)}
+                          className="p-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors">
+                          <Pencil className="w-3.5 h-3.5"/>
+                        </button>
+                        <button onClick={()=>setDeleteTarget(fee)}
+                          className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5"/>
+                        </button>
+                      </>
                     )}
-                    {isAdmin && <button onClick={()=>openEditFee(fee)} className="px-3 py-2 rounded-lg text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200"><Pencil className="w-3.5 h-3.5"/></button>}
-                    {isAdmin && <button onClick={()=>setDeleteTarget(fee)} className="px-3 py-2 rounded-lg text-xs font-semibold text-red-600 bg-red-50 hover:bg-red-100 border border-red-200"><Trash2 className="w-3.5 h-3.5"/></button>}
                   </div>
                 </div>
               </div>
@@ -591,118 +607,117 @@ export default function Fees() {
 
       /* ── LIST VIEW ── */
       ) : (
-        <div className="rounded-xl border overflow-hidden shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[860px]">
-              <thead>
-                <tr className="bg-gradient-to-r from-blue-700 to-indigo-700 text-white">
-                  {["#","Student","Adm #","Class","Month","Amount","Fine","Disc","Paid","Remaining","Due Date","Status",""].map(h=>(
-                    <th key={h} className="text-left py-3 px-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {displayFees.map((fee,i)=>{
-                  const s  = st(fee.status); const SI=s.icon;
-                  const admNo=(ext(fee).admissionNumber as string)??"—";
-                  const fineN=Number(ext(fee).fine??0);
-                  return (
-                    <tr key={fee.id} className={`border-b hover:bg-blue-50/30 transition-colors ${i%2===0?"bg-white":"bg-gray-50/50"}`}>
-                      <td className="py-2.5 px-3 text-gray-400 text-xs">{i+1}</td>
-                      <td className="py-2.5 px-3 font-semibold text-gray-900 whitespace-nowrap">{fee.studentName||"—"}</td>
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-purple-600 font-bold whitespace-nowrap">{admNo}</td>
-                      <td className="py-2.5 px-3 whitespace-nowrap"><span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{fee.className||"—"}</span></td>
-                      <td className="py-2.5 px-3 text-gray-600 whitespace-nowrap">{fee.month}</td>
-                      <td className="py-2.5 px-3 font-semibold whitespace-nowrap">PKR {fee.amount.toLocaleString()}</td>
-                      <td className="py-2.5 px-3 text-orange-500 whitespace-nowrap">{fineN>0?`+${fineN.toLocaleString()}`:"—"}</td>
-                      <td className="py-2.5 px-3 text-blue-500 whitespace-nowrap">{Number(ext(fee).discount??0)>0?`-${Number(ext(fee).discount??0).toLocaleString()}`:"—"}</td>
-                      <td className="py-2.5 px-3 font-semibold text-emerald-600 whitespace-nowrap">PKR {(fee.paidAmount??0).toLocaleString()}</td>
-                      <td className="py-2.5 px-3 font-bold text-red-600 whitespace-nowrap">PKR {(fee.remainingAmount??0).toLocaleString()}</td>
-                      <td className="py-2.5 px-3 text-gray-500 whitespace-nowrap text-xs">{fee.dueDate}</td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${s.badge}`}>
-                          <SI className="w-3 h-3"/>{s.label}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 whitespace-nowrap">
-                        <div className="flex items-center gap-1">
-                          {!isStudent && fee.status!=="paid" && <button onClick={()=>{setPayOpen(fee.id);setPayAmount(String(fee.remainingAmount??0));}} className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-xs font-bold">Pay</button>}
-                          {fee.status==="paid" && <button onClick={()=>{setReceipt({receiptNo:`RCP-${fee.id}`,studentName:fee.studentName??"—",admissionNumber:(ext(fee).admissionNumber as string)??"—",className:fee.className??"—",month:fee.month,amountPaid:fee.paidAmount??0,remaining:0,newStatus:"paid",paidDate:new Date().toLocaleDateString("en-PK",{dateStyle:"long"})});}} className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50"><Printer className="w-3.5 h-3.5"/></button>}
-                          {isAdmin && <button onClick={()=>openEditFee(fee)} className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50"><Pencil className="w-3.5 h-3.5"/></button>}
-                          {isAdmin && <button onClick={()=>setDeleteTarget(fee)} disabled={deletingId===fee.id} className="p-1.5 rounded-lg text-red-500 hover:bg-red-50">{deletingId===fee.id?<Loader2 className="w-3.5 h-3.5 animate-spin"/>:<Trash2 className="w-3.5 h-3.5"/>}</button>}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className="bg-blue-50 border-t-2 border-blue-200">
-                  <td colSpan={5} className="py-2.5 px-3 text-xs font-bold text-blue-800">Total ({displayFees.length})</td>
-                  <td className="py-2.5 px-3 font-bold whitespace-nowrap">PKR {displayFees.reduce((s,f)=>s+f.amount,0).toLocaleString()}</td>
-                  <td colSpan={2}/>
-                  <td className="py-2.5 px-3 font-bold text-emerald-700 whitespace-nowrap">PKR {displayFees.reduce((s,f)=>s+(f.paidAmount??0),0).toLocaleString()}</td>
-                  <td className="py-2.5 px-3 font-bold text-red-700 whitespace-nowrap">PKR {displayFees.reduce((s,f)=>s+(f.remainingAmount??0),0).toLocaleString()}</td>
-                  <td colSpan={3}/>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+        <div className="overflow-x-auto rounded-xl border shadow-sm">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-gray-50 border-b text-xs text-gray-500 uppercase tracking-wide">
+                {["Student","Adm #","Class","Month","Amount","Fine","Paid","Remaining","Due Date","Status","Actions"].map(h=>(
+                  <th key={h} className="text-left px-4 py-3 font-semibold whitespace-nowrap">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayFees.map((fee,i)=>{
+                const s=st(fee.status); const SI=s.icon;
+                const fineN=Number(ext(fee).fine??0);
+                const discN=Number(ext(fee).discount??0);
+                const admNo=(ext(fee).admissionNumber as string)??"—";
+                const effTot=Math.max(0,fee.amount+fineN-discN);
+                const rem=fee.remainingAmount??0;
+                return (
+                  <tr key={fee.id} className={`border-b last:border-0 hover:bg-gray-50 transition-colors ${i%2===0?"bg-white":"bg-gray-50/30"}`}>
+                    <td className="px-4 py-3 font-semibold text-gray-900">{fee.studentName||"—"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-purple-600 font-bold">{admNo}</td>
+                    <td className="px-4 py-3 text-gray-600">{fee.className||"—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{fee.month}</td>
+                    <td className="px-4 py-3 font-semibold">PKR {fee.amount.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-orange-600">{fineN>0?`+PKR ${fineN.toLocaleString()}`:"—"}</td>
+                    <td className="px-4 py-3 text-emerald-600 font-semibold">PKR {(fee.paidAmount??0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-red-600 font-semibold">{rem>0?`PKR ${rem.toLocaleString()}`:"—"}</td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">{fee.dueDate}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border ${s.badge}`}>
+                        <SI className="w-3 h-3"/>{s.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        {!isStudent && fee.status!=="paid" && (
+                          <button onClick={()=>{setPayOpen(fee.id);setPayAmount(String(fee.remainingAmount??0));}}
+                            className="px-2 py-1 rounded bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">Pay</button>
+                        )}
+                        {isAdmin && <>
+                          <button onClick={()=>openEditFee(fee)} className="p-1 rounded bg-blue-50 hover:bg-blue-100 text-blue-600"><Pencil className="w-3 h-3"/></button>
+                          <button onClick={()=>setDeleteTarget(fee)} className="p-1 rounded bg-red-50 hover:bg-red-100 text-red-600"><Trash2 className="w-3 h-3"/></button>
+                        </>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
       {/* ── Pay Dialog ── */}
       <Dialog open={payOpen!==null} onOpenChange={o=>{if(!o){setPayOpen(null);setPayAmount("");setPayDiscount("0");}}}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Pay — {currFee?.studentName}</DialogTitle></DialogHeader>
-          <div className="space-y-4 pt-2">
-            {currFee && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm space-y-1">
-                <div className="flex justify-between"><span className="text-gray-500">Fee:</span><span className="font-semibold">PKR {currFee.amount.toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Paid:</span><span className="font-semibold text-emerald-600">PKR {(currFee.paidAmount??0).toLocaleString()}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Remaining:</span><span className="font-bold text-red-600">PKR {(currFee.remainingAmount??0).toLocaleString()}</span></div>
+          <DialogHeader><DialogTitle>Collect Payment</DialogTitle></DialogHeader>
+          {currFee && (
+            <div className="space-y-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                <p className="font-bold">{currFee.studentName}</p>
+                <p className="text-gray-500 text-xs">{currFee.month} · {currFee.className}</p>
+                <p className="text-red-600 font-semibold mt-1">Remaining: PKR {(currFee.remainingAmount??0).toLocaleString()}</p>
               </div>
-            )}
-            <div><label className="text-sm font-medium block mb-1.5">Amount Paid (PKR)*</label><Input type="number" placeholder="Enter amount" value={payAmount} onChange={e=>setPayAmount(e.target.value)}/></div>
-            <div><label className="text-sm font-medium block mb-1.5">Discount (PKR)</label><Input type="number" placeholder="0" value={payDiscount} onChange={e=>setPayDiscount(e.target.value)}/></div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={()=>{setPayOpen(null);setPayAmount("");setPayDiscount("0");}}>Cancel</Button>
-              <Button onClick={handlePay} disabled={!payAmount||payMut.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                {payMut.isPending&&<Loader2 className="w-4 h-4 animate-spin mr-2"/>}Record Payment
-              </Button>
+              <div>
+                <label className="text-sm font-medium block mb-1">Amount Paid (PKR)</label>
+                <Input type="number" value={payAmount} onChange={e=>setPayAmount(e.target.value)} placeholder="Enter amount"/>
+              </div>
+              <div>
+                <label className="text-sm font-medium block mb-1">Discount (PKR)</label>
+                <Input type="number" value={payDiscount} onChange={e=>setPayDiscount(e.target.value)} placeholder="0"/>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={()=>{setPayOpen(null);setPayAmount("");setPayDiscount("0");}}>Cancel</Button>
+                <Button onClick={handlePay} disabled={payMut.isPending||!payAmount} className="bg-emerald-600 text-white hover:bg-emerald-700">
+                  {payMut.isPending&&<Loader2 className="w-4 h-4 animate-spin mr-2"/>}Collect
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 
       {/* ── Edit Dialog ── */}
       <Dialog open={!!editFee} onOpenChange={o=>{if(!o)setEditFee(null);}}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Edit Fee — {editFee?.studentName}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Edit Fee Record</DialogTitle></DialogHeader>
           <Form {...editForm}>
             <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
-              <FormField control={editForm.control} name="amount"  render={({field})=>(<FormItem><FormLabel>Amount*</FormLabel><FormControl><Input type="number" {...field}/></FormControl><FormMessage/></FormItem>)}/>
+              <FormField control={editForm.control} name="amount"  render={({field})=>(<FormItem><FormLabel>Amount (PKR)*</FormLabel><FormControl><Input type="number" {...field}/></FormControl><FormMessage/></FormItem>)}/>
               <FormField control={editForm.control} name="month"   render={({field})=>(<FormItem><FormLabel>Month*</FormLabel><FormControl><Input type="month" {...field}/></FormControl><FormMessage/></FormItem>)}/>
               <FormField control={editForm.control} name="dueDate" render={({field})=>(<FormItem><FormLabel>Due Date*</FormLabel><FormControl><Input type="date" {...field}/></FormControl><FormMessage/></FormItem>)}/>
-              <FormField control={editForm.control} name="fine"    render={({field})=>(<FormItem><FormLabel>Fine (PKR)</FormLabel><FormControl><Input type="number" {...field}/></FormControl></FormItem>)}/>
+              <FormField control={editForm.control} name="fine"    render={({field})=>(<FormItem><FormLabel>Fine (PKR)</FormLabel><FormControl><Input type="number" placeholder="0" {...field}/></FormControl></FormItem>)}/>
               <div className="flex justify-end gap-2">
                 <Button type="button" variant="outline" onClick={()=>setEditFee(null)}>Cancel</Button>
-                <Button type="submit" disabled={editSaving}>{editSaving&&<Loader2 className="w-4 h-4 animate-spin mr-2"/>}Update</Button>
+                <Button type="submit" disabled={editSaving}>{editSaving&&<Loader2 className="w-4 h-4 animate-spin mr-2"/>}Save</Button>
               </div>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete Dialog ── */}
+      {/* ── Delete Confirm ── */}
       <Dialog open={!!deleteTarget} onOpenChange={o=>{if(!o)setDeleteTarget(null);}}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Delete Fee Record?</DialogTitle></DialogHeader>
-          <p className="text-sm text-gray-600"><strong>{deleteTarget?.studentName}</strong> — {deleteTarget?.month} ka record permanently delete hoga.</p>
-          <div className="flex justify-end gap-2 mt-2">
+          <DialogHeader><DialogTitle className="text-red-600">Delete Fee Record?</DialogTitle></DialogHeader>
+          <p className="text-sm text-gray-600">This will permanently remove the fee record for <strong>{deleteTarget?.studentName}</strong> ({deleteTarget?.month}).</p>
+          <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={()=>setDeleteTarget(null)}>Cancel</Button>
-            <Button variant="destructive" disabled={!!deletingId} onClick={()=>deleteTarget&&handleDelete(deleteTarget)}>
-              {deletingId?<Loader2 className="w-4 h-4 animate-spin mr-2"/>:null}Delete
+            <Button variant="destructive" disabled={deletingId===deleteTarget?.id} onClick={()=>deleteTarget&&handleDelete(deleteTarget)}>
+              {deletingId===deleteTarget?.id&&<Loader2 className="w-4 h-4 animate-spin mr-2"/>}Delete
             </Button>
           </div>
         </DialogContent>
@@ -711,26 +726,20 @@ export default function Fees() {
       {/* ── Receipt Dialog ── */}
       <Dialog open={!!receipt} onOpenChange={o=>{if(!o)setReceipt(null);}}>
         <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-700">
-              <CheckCircle className="w-5 h-5"/> Payment Recorded!
-            </DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Payment Successful</DialogTitle></DialogHeader>
           {receipt && (
-            <div className="space-y-3 pt-1">
-              <div className={`p-4 rounded-xl text-center ${receipt.remaining<=0?"bg-emerald-50 border border-emerald-200":"bg-amber-50 border border-amber-200"}`}>
-                <p className={`text-2xl font-black ${receipt.remaining<=0?"text-emerald-700":"text-amber-700"}`}>PKR {receipt.amountPaid.toLocaleString()}</p>
-                <p className="text-sm font-semibold mt-1 text-gray-700">{receipt.remaining<=0?"✓ Fully Paid":`Remaining: PKR ${receipt.remaining.toLocaleString()}`}</p>
+            <div className="space-y-3">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 text-center">
+                <CheckCircle className="w-10 h-10 text-emerald-500 mx-auto mb-2"/>
+                <p className="font-bold text-gray-900">{receipt.studentName}</p>
+                <p className="text-emerald-700 text-xl font-black">PKR {receipt.amountPaid.toLocaleString()}</p>
+                <p className="text-xs text-gray-500 mt-1">{receipt.month} · {receipt.className}</p>
+                {receipt.remaining>0 && <p className="text-red-500 text-xs font-semibold mt-1">Remaining: PKR {receipt.remaining.toLocaleString()}</p>}
               </div>
-              <div className="text-sm space-y-1 text-gray-600">
-                <p><strong>Student:</strong> {receipt.studentName}</p>
-                <p><strong>Month:</strong> {receipt.month}</p>
-                <p><strong>Class:</strong> {receipt.className}</p>
+              <div className="flex gap-2">
+                <Button className="flex-1" onClick={printReceipt}><Printer className="w-4 h-4 mr-2"/>Print Receipt</Button>
+                <Button variant="outline" onClick={()=>setReceipt(null)}>Close</Button>
               </div>
-              <Button onClick={printReceipt} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                <Printer className="w-4 h-4 mr-2"/> Print Receipt (School + Parent)
-              </Button>
-              <Button variant="outline" onClick={()=>setReceipt(null)} className="w-full">Close</Button>
             </div>
           )}
         </DialogContent>
