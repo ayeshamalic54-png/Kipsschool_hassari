@@ -14,6 +14,8 @@ import certificatesRouter from "./certificates";
 import adminRouter from "./admin";
 import feeStructureRouter from "./fee-structure";
 import settingsRouter from "./settings";
+import feeVouchersRouter from "./fee-vouchers";   // ← NEW
+import arrearsRouter from "./arrears";             // ← NEW
 
 const router: IRouter = Router();
 
@@ -32,5 +34,7 @@ router.use("/certificates", certificatesRouter);
 router.use("/admin", adminRouter);
 router.use("/fee-structures", feeStructureRouter);
 router.use("/settings", settingsRouter);
+router.use("/fee-vouchers", feeVouchersRouter);   // ← NEW
+router.use("/arrears", arrearsRouter);             // ← NEW
 
 export default router;
