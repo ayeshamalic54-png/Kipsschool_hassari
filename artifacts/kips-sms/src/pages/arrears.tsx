@@ -1,839 +1,569 @@
-import { useEffect, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
-import { useListFees, useListStudents, useListClasses } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useState, useEffect, useCallback } from "react";
+import { useListClasses } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import {
-  ClipboardList, Printer, AlertTriangle, GraduationCap, ArrowRight,
-  Users, CheckCircle2, XCircle, ChevronRight, TrendingUp, AlertCircle,
-  Plus, Pencil, Trash2, Info, KeyRound,
-} from "lucide-react";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
+import {
+  AlertTriangle, Users, DollarSign, TrendingDown,
+  Plus, Pencil, Trash2, X, ChevronDown, ChevronUp,
+  Search, CalendarDays, ReceiptText,
+} from "lucide-react";
 
-// ── Auth token helper ─────────────────────────────────────────────────────────
-const getToken = () => localStorage.getItem("kips_token");
-const authHeaders = () => ({
-  "Content-Type": "application/json",
-  ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
-});
+const NAVY   = "#1a2a5e";
+const ORANGE = "#e07b1a";
 
-// ── API helpers ───────────────────────────────────────────────────────────────
-async function apiFetch(url: string, options?: RequestInit) {
-  const res = await fetch(url, { ...options, headers: { ...authHeaders(), ...(options?.headers ?? {}) } });
-  if (res.status === 204) return null;
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error ?? "Request failed");
-  return json;
+interface ArrearRecord {
+  id:              number;
+  studentId:       number;
+  studentName:     string | null;
+  admissionNumber: string | null;
+  fatherName:      string | null;
+  classId:         number | null;
+  className:       string | null;
+  month:           string;
+  dueDate:         string;
+  amount:          number;
+  fine:            number;
+  paidAmount:      number;
+  remainingAmount: number;
+  status:          string;
+  notes:           string | null;
 }
 
-const createFeeRecord = (data: Record<string, unknown>) =>
-  apiFetch("/api/fees", { method: "POST", body: JSON.stringify(data) });
-
-const updateFeeRecord = (id: number, data: Record<string, unknown>) =>
-  apiFetch(`/api/fees/${id}`, { method: "PUT", body: JSON.stringify(data) });
-
-const deleteFeeRecord = (id: number) =>
-  apiFetch(`/api/fees/${id}`, { method: "DELETE" });
-
-const fixStaffLogins = () =>
-  apiFetch("/api/staff/fix-logins", { method: "POST" });
-
-const promoteStudents = (payload: { fromClassId: number; toClassId: number; studentIds: number[] }) =>
-  apiFetch("/api/students/promote", { method: "POST", body: JSON.stringify(payload) });
-
-// ── Print styles ──────────────────────────────────────────────────────────────
-const PRINT_STYLES = `
-  @page { size: A4 portrait; margin: 0; }
-  @media print {
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    body > *:not(#kips-print-portal) { display: none !important; }
-    #kips-print-portal {
-      display: block !important; position: absolute !important;
-      top: 0 !important; left: 0 !important; width: 100% !important;
-      background: white !important; font-family: Arial, sans-serif !important;
-      color: #111827 !important; font-size: 11pt !important;
-      padding: 14mm 14mm !important; box-sizing: border-box !important;
-    }
-    table { border-collapse: collapse !important; width: 100% !important; }
-    tr { page-break-inside: avoid; } thead { display: table-header-group; }
-  }
-`;
-const printDate = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface ArrearRow {
-  id: number;
-  month: string;
-  amount: number;
-  paidAmount: number;
-  remaining: number;
-  fine: number;
-  dueDate: string;
-  notes: string | null;
-  status: string;
-}
-interface StudentArrears {
-  studentId: number;
-  studentName: string;
+interface Student {
+  id:              number;
+  name:            string;
   admissionNumber: string;
-  className: string;
-  rows: ArrearRow[];
-  totalArrears: number;
+  classId:         number | null;
+  fatherName:      string | null;
+  status:          string;
 }
 
-// ── Class card gradients ──────────────────────────────────────────────────────
-const CLASS_GRADIENTS = [
-  { from: "#6366f1", to: "#8b5cf6", light: "#ede9fe", border: "#a78bfa", text: "#4c1d95" },
-  { from: "#0ea5e9", to: "#2563eb", light: "#dbeafe", border: "#93c5fd", text: "#1e3a8a" },
-  { from: "#10b981", to: "#059669", light: "#d1fae5", border: "#6ee7b7", text: "#064e3b" },
-  { from: "#f59e0b", to: "#d97706", light: "#fef3c7", border: "#fcd34d", text: "#78350f" },
-  { from: "#ef4444", to: "#dc2626", light: "#fee2e2", border: "#fca5a5", text: "#7f1d1d" },
-  { from: "#ec4899", to: "#db2777", light: "#fce7f3", border: "#f9a8d4", text: "#831843" },
-  { from: "#14b8a6", to: "#0d9488", light: "#ccfbf1", border: "#5eead4", text: "#134e4a" },
-  { from: "#f97316", to: "#ea580c", light: "#ffedd5", border: "#fdba74", text: "#7c2d12" },
-  { from: "#06b6d4", to: "#0284c7", light: "#e0f2fe", border: "#7dd3fc", text: "#0c4a6e" },
-  { from: "#8b5cf6", to: "#7c3aed", light: "#ede9fe", border: "#c4b5fd", text: "#4c1d95" },
-];
-const getGradient = (i: number) => CLASS_GRADIENTS[i % CLASS_GRADIENTS.length];
+function getToken(): string {
+  return localStorage.getItem("token") ?? localStorage.getItem("kips_token") ?? "";
+}
+function authH(): Record<string, string> {
+  const t = getToken();
+  return t
+    ? { Authorization: `Bearer ${t}`, "Content-Type": "application/json" }
+    : { "Content-Type": "application/json" };
+}
+function getUserRole(): string {
+  try {
+    const t = getToken();
+    if (!t) return "";
+    const p = JSON.parse(atob(t.split(".")[1]!));
+    return p.role ?? "";
+  } catch { return ""; }
+}
 
-// ── Empty form state ──────────────────────────────────────────────────────────
-const emptyForm = () => ({
-  studentId: "",
-  month: new Date().toISOString().slice(0, 7),
-  amount: "",
-  fine: "0",
-  dueDate: new Date(Date.now() - 86400000).toISOString().slice(0, 10),
-  notes: "",
-});
+function statusBadge(status: string, remaining: number) {
+  if (status === "paid" || remaining === 0)
+    return <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200">Paid</Badge>;
+  if (status === "partial")
+    return <Badge className="bg-amber-100 text-amber-700 border-amber-200">Partial</Badge>;
+  return <Badge className="bg-red-100 text-red-700 border-red-200">Unpaid</Badge>;
+}
 
-// ══════════════════════════════════════════════════════════════════════════════
-export default function Arrears() {
-  const [activeTab, setActiveTab] = useState<"arrears" | "promotion">("arrears");
-  const { data: fees, isLoading: feesLoading } = useListFees({});
-  const { data: students, isLoading: studentsLoading } = useListStudents({});
-  const { data: classes, isLoading: classesLoading } = useListClasses();
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
+// ── Add/Edit Dialog ────────────────────────────────────────────────────────────
+function ArrearDialog({
+  open, title, students, classes,
+  initial, onClose, onSave,
+}: {
+  open:     boolean;
+  title:    string;
+  students: Student[];
+  classes:  { id: number; name: string }[];
+  initial?: Partial<ArrearRecord>;
+  onClose:  () => void;
+  onSave:   (data: Partial<ArrearRecord>) => Promise<void>;
+}) {
+  const [draft,  setDraft]  = useState<Partial<ArrearRecord>>({});
+  const [saving, setSaving] = useState(false);
 
-  // ── Dialogs ──────────────────────────────────────────────────────────────────
-  const [addOpen, setAddOpen]     = useState(false);
-  const [editOpen, setEditOpen]   = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editRow, setEditRow]     = useState<ArrearRow & { studentName: string } | null>(null);
-  const [deleteRow, setDeleteRow] = useState<ArrearRow & { studentName: string } | null>(null);
-  const [form, setForm]           = useState(emptyForm());
-  const [saving, setSaving]       = useState(false);
-  const [deleting, setDeleting]   = useState(false);
-
-  // ── Promotion dialog ─────────────────────────────────────────────────────────
-  const [promoteOpen, setPromoteOpen]               = useState(false);
-  const [selectedFromClass, setSelectedFromClass]   = useState<number | null>(null);
-  const [selectedToClassId, setSelectedToClassId]   = useState("");
-  const [includeArrears, setIncludeArrears]         = useState(false);
-  const [promoting, setPromoting]                   = useState(false);
-  const [fixingLogins, setFixingLogins]             = useState(false);
-
-  // ── Print styles ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    const existing = document.getElementById("kips-print-styles");
-    if (existing) existing.remove();
-    const el = document.createElement("style");
-    el.id = "kips-print-styles"; el.textContent = PRINT_STYLES;
-    document.head.appendChild(el);
-    return () => { document.getElementById("kips-print-styles")?.remove(); };
+    if (open) {
+      setDraft(initial
+        ? {
+            studentId: initial.studentId,
+            amount:    initial.amount    ?? 0,
+            fine:      initial.fine      ?? 0,
+            month:     initial.month     ?? "",
+            dueDate:   initial.dueDate   ?? "",
+            notes:     initial.notes     ?? "",
+          }
+        : {
+            amount:  0,
+            fine:    0,
+            month:   new Date().toISOString().slice(0, 7),
+            dueDate: (() => { const d = new Date(); d.setDate(10); return d.toISOString().slice(0, 10); })(),
+          }
+      );
+    }
+  }, [open]);
+
+  const filteredStudents = draft.classId
+    ? students.filter(s => String(s.classId) === String(draft.classId))
+    : students;
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2" style={{ color: NAVY }}>
+            <AlertTriangle className="w-5 h-5" style={{ color: ORANGE }} />
+            {title}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">Filter by Class (optional)</label>
+            <Select
+              value={draft.classId ? String(draft.classId) : "all"}
+              onValueChange={v => setDraft(d => ({
+                ...d,
+                classId:   v === "all" ? undefined : Number(v),
+                studentId: undefined,
+              }))}>
+              <SelectTrigger><SelectValue placeholder="All classes" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All classes</SelectItem>
+                {classes.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">Student *</label>
+            <Select
+              value={draft.studentId ? String(draft.studentId) : ""}
+              onValueChange={v => setDraft(d => ({ ...d, studentId: Number(v) }))}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select student..." />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredStudents.filter(s => s.status === "active").map(s => (
+                  <SelectItem key={s.id} value={String(s.id)}>
+                    {s.name} ({s.admissionNumber})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Month *</label>
+              <Input type="month" value={draft.month ?? ""}
+                onChange={e => setDraft(d => ({ ...d, month: e.target.value }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Due Date *</label>
+              <Input type="date" value={draft.dueDate ?? ""}
+                onChange={e => setDraft(d => ({ ...d, dueDate: e.target.value }))} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Amount (PKR) *</label>
+              <Input type="number" min="0" value={draft.amount ?? ""}
+                onChange={e => setDraft(d => ({ ...d, amount: Number(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Fine (PKR)</label>
+              <Input type="number" min="0" value={draft.fine ?? ""}
+                onChange={e => setDraft(d => ({ ...d, fine: Number(e.target.value) }))} />
+            </div>
+          </div>
+
+          <div>
+            <label className="text-sm font-medium text-gray-700 block mb-1.5">Notes</label>
+            <Input placeholder="e.g. 2 months outstanding" value={draft.notes ?? ""}
+              onChange={e => setDraft(d => ({ ...d, notes: e.target.value }))} />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2 border-t">
+          <Button variant="outline" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button
+            disabled={saving || !draft.studentId || !draft.amount || !draft.month || !draft.dueDate}
+            onClick={async () => { setSaving(true); await onSave(draft); setSaving(false); }}
+            style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}
+            className="text-white">
+            {saving ? "Saving..." : "Save"}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────────────
+export default function Arrears() {
+  const { toast } = useToast();
+  const { data: classes } = useListClasses();
+
+  const [records,        setRecords]        = useState<ArrearRecord[]>([]);
+  const [students,       setStudents]       = useState<Student[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [search,         setSearch]         = useState("");
+  const [filterClass,    setFilterClass]    = useState("all");
+  const [filterStatus,   setFilterStatus]   = useState("all");
+  const [expandedId,     setExpandedId]     = useState<number | null>(null);
+  const [addOpen,        setAddOpen]        = useState(false);
+  const [editRecord,     setEditRecord]     = useState<ArrearRecord | null>(null);
+  const [deleteId,       setDeleteId]       = useState<number | null>(null);
+  const [deleteStudName, setDeleteStudName] = useState("");
+
+  const isAdmin = getUserRole() === "admin";
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [arrRes, studRes] = await Promise.all([
+        fetch("/api/arrears", { headers: authH() }),
+        fetch("/api/students", { headers: authH() }),
+      ]);
+      const arrData: Record<string, unknown>[] = arrRes.ok ? await arrRes.json() : [];
+      const studData: Record<string, unknown>[] = studRes.ok ? await studRes.json() : [];
+
+      setRecords(arrData.map(r => ({
+        id:              Number(r.id),
+        studentId:       Number(r.studentId),
+        studentName:     (r.studentName as string | null) ?? null,
+        admissionNumber: (r.admissionNumber as string | null) ?? null,
+        fatherName:      (r.fatherName as string | null) ?? null,
+        classId:         r.classId != null ? Number(r.classId) : null,
+        className:       (r.className as string | null) ?? null,
+        month:           String(r.month   ?? ""),
+        dueDate:         String(r.dueDate ?? ""),
+        amount:          Number(r.amount          ?? 0),
+        fine:            Number(r.fine            ?? 0),
+        paidAmount:      Number(r.paidAmount      ?? 0),
+        remainingAmount: Number(r.remainingAmount ?? 0),
+        status:          String(r.status ?? "unpaid"),
+        notes:           (r.notes as string | null) ?? null,
+      })));
+
+      setStudents(studData.map(s => ({
+        id:              Number(s.id),
+        name:            String(s.name ?? ""),
+        admissionNumber: String(s.admissionNumber ?? ""),
+        classId:         s.classId != null ? Number(s.classId) : null,
+        fatherName:      (s.fatherName as string | null) ?? null,
+        status:          String(s.status ?? "active"),
+      })));
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Load error", description: "Could not load arrear records.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const today = new Date().toISOString().slice(0, 10);
+  useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Build arrears grouped by student ─────────────────────────────────────────
-  const overdueFees = (fees ?? []).filter(f =>
-    (f.status === "unpaid" || f.status === "partial") && f.dueDate < today
-  );
-  const byStudent: Record<number, StudentArrears> = {};
-  for (const f of overdueFees) {
-    const sid = f.studentId;
-    if (!byStudent[sid]) byStudent[sid] = {
-      studentId: sid,
-      studentName: f.studentName ?? "—",
-      admissionNumber: f.admissionNumber ?? "—",
-      className: f.className ?? "—",
-      rows: [],
-      totalArrears: 0,
-    };
-    const remaining = f.remainingAmount ?? (f.amount - (f.paidAmount ?? 0));
-    const fine = f.fine ?? 0;
-    byStudent[sid].rows.push({
-      id: f.id,
-      month: f.month,
-      amount: f.amount,
-      paidAmount: f.paidAmount ?? 0,
-      remaining,
-      fine,
-      dueDate: f.dueDate,
-      notes: (f as Record<string, unknown>).notes as string | null ?? null,
-      status: f.status,
-    });
-    byStudent[sid].totalArrears += remaining + fine;
-  }
-  const arrears    = Object.values(byStudent).sort((a, b) => b.totalArrears - a.totalArrears);
-  const grandTotal = arrears.reduce((s, a) => s + a.totalArrears, 0);
-
-  // ── Promotion helpers ─────────────────────────────────────────────────────────
-  const arrearStudentIds = new Set(arrears.map(a => a.studentId));
-  const classSummaries = (classes ?? []).map((cls, idx) => {
-    const clsStudents = (students ?? []).filter(s => s.classId === cls.id && s.status === "active");
-    const arrearCount = clsStudents.filter(s => arrearStudentIds.has(s.id)).length;
-    return { cls, idx, total: clsStudents.length, arrearCount, clearCount: clsStudents.length - arrearCount, list: clsStudents };
-  }).filter(c => c.total > 0);
-
-  const fromInfo = classSummaries.find(c => c.cls.id === selectedFromClass);
-  const fromStudents = fromInfo?.list ?? [];
-  const eligible = includeArrears ? fromStudents : fromStudents.filter(s => !arrearStudentIds.has(s.id));
-
-  // ── Invalidate fees cache after mutation ──────────────────────────────────────
-  const invalidate = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ["/api/fees"] });
-  }, [queryClient]);
-
-  // ── Add arrear ────────────────────────────────────────────────────────────────
-  const handleAdd = async () => {
-    if (!form.studentId || !form.amount || !form.month || !form.dueDate) {
-      toast({ variant: "destructive", title: "Please fill all required fields" }); return;
+  // ── Filtered list ────────────────────────────────────────────────────────────
+  const filtered = records.filter(r => {
+    const q = search.toLowerCase();
+    if (q && !(
+      (r.studentName?.toLowerCase().includes(q)) ||
+      (r.admissionNumber?.toLowerCase().includes(q)) ||
+      (r.className?.toLowerCase().includes(q))
+    )) return false;
+    if (filterClass !== "all" && String(r.classId) !== filterClass) return false;
+    if (filterStatus !== "all") {
+      if (filterStatus === "unpaid"  && r.status !== "unpaid")  return false;
+      if (filterStatus === "partial" && r.status !== "partial") return false;
     }
-    setSaving(true);
+    return true;
+  });
+
+  // ── Stats ────────────────────────────────────────────────────────────────────
+  const totalOutstanding = records.reduce((s, r) => s + r.remainingAmount, 0);
+  const uniqueStudents   = new Set(records.map(r => r.studentId)).size;
+  const partialCount     = records.filter(r => r.status === "partial").length;
+
+  // ── Save / Delete ────────────────────────────────────────────────────────────
+  const handleSaveAdd = async (data: Partial<ArrearRecord>) => {
     try {
-      await createFeeRecord({
-        studentId: Number(form.studentId),
-        amount:    form.amount,
-        fine:      form.fine || "0",
-        month:     form.month,
-        dueDate:   form.dueDate,
-        status:    "unpaid",
-        notes:     form.notes || null,
-        paidAmount: "0",
+      const res = await fetch("/api/arrears", {
+        method:  "POST",
+        headers: authH(),
+        body:    JSON.stringify({
+          studentId: data.studentId,
+          amount:    data.amount ?? 0,
+          fine:      data.fine   ?? 0,
+          month:     data.month,
+          dueDate:   data.dueDate,
+          notes:     data.notes ?? null,
+        }),
       });
-      toast({ title: "Arrear added", description: "Fee record created and will appear in student's fee section" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "Arrear added" });
       setAddOpen(false);
-      setForm(emptyForm());
-      invalidate();
-    } catch (e: unknown) {
-      toast({ variant: "destructive", title: "Failed", description: String((e as Error).message) });
-    } finally { setSaving(false); }
+      loadData();
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "destructive" });
+    }
   };
 
-  // ── Edit arrear ───────────────────────────────────────────────────────────────
-  const handleEdit = async () => {
-    if (!editRow) return;
-    setSaving(true);
+  const handleSaveEdit = async (data: Partial<ArrearRecord>) => {
+    if (!editRecord) return;
     try {
-      await updateFeeRecord(editRow.id, {
-        amount:  form.amount,
-        fine:    form.fine || "0",
-        month:   form.month,
-        dueDate: form.dueDate,
-        notes:   form.notes || null,
+      const res = await fetch(`/api/arrears/${editRecord.id}`, {
+        method:  "PUT",
+        headers: authH(),
+        body:    JSON.stringify({
+          amount:  data.amount,
+          fine:    data.fine,
+          month:   data.month,
+          dueDate: data.dueDate,
+          notes:   data.notes,
+        }),
       });
-      toast({ title: "Arrear updated successfully" });
-      setEditOpen(false);
-      invalidate();
-    } catch (e: unknown) {
-      toast({ variant: "destructive", title: "Failed", description: String((e as Error).message) });
-    } finally { setSaving(false); }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "Arrear updated" });
+      setEditRecord(null);
+      loadData();
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "destructive" });
+    }
   };
 
-  // ── Delete arrear ─────────────────────────────────────────────────────────────
   const handleDelete = async () => {
-    if (!deleteRow) return;
-    setDeleting(true);
+    if (!deleteId) return;
     try {
-      await deleteFeeRecord(deleteRow.id);
-      toast({ title: "Arrear deleted" });
-      setDeleteOpen(false);
-      invalidate();
-    } catch (e: unknown) {
-      toast({ variant: "destructive", title: "Failed", description: String((e as Error).message) });
-    } finally { setDeleting(false); }
+      const res = await fetch(`/api/arrears/${deleteId}`, { method: "DELETE", headers: authH() });
+      if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
+      toast({ title: "Arrear removed" });
+      setDeleteId(null);
+    } catch (err) {
+      toast({ title: "Error", description: String(err), variant: "destructive" });
+    } finally {
+      loadData();
+    }
   };
 
-  // ── Open edit dialog ──────────────────────────────────────────────────────────
-  const openEdit = (row: ArrearRow, studentName: string) => {
-    setEditRow({ ...row, studentName });
-    setForm({
-      studentId: "",
-      month:     row.month,
-      amount:    String(row.amount),
-      fine:      String(row.fine),
-      dueDate:   row.dueDate,
-      notes:     row.notes ?? "",
-    });
-    setEditOpen(true);
-  };
-
-  // ── Promote ───────────────────────────────────────────────────────────────────
-  const handlePromote = async () => {
-    if (!selectedFromClass || !selectedToClassId || eligible.length === 0) return;
-    setPromoting(true);
-    try {
-      const result = await promoteStudents({
-        fromClassId: selectedFromClass,
-        toClassId:   Number(selectedToClassId),
-        studentIds:  eligible.map(s => s.id),
-      }) as { promoted: number; fromClass: string; toClass: string; feeUpdated: boolean; newFeeAmount: number | null };
-      toast({
-        title: `${result.promoted} students promoted!`,
-        description: `${result.fromClass} → ${result.toClass}${result.feeUpdated ? ` · Fee: PKR ${result.newFeeAmount?.toLocaleString()}` : ""}`,
-      });
-      setPromoteOpen(false);
-      setSelectedFromClass(null);
-      setSelectedToClassId("");
-    } catch (e: unknown) {
-      toast({ variant: "destructive", title: "Promotion failed", description: String((e as Error).message) });
-    } finally { setPromoting(false); }
-  };
-
-  const handleFixLogins = async () => {
-    setFixingLogins(true);
-    try {
-      const r = await fixStaffLogins() as { fixed: number; message: string };
-      toast({ title: "Staff logins fixed", description: r.message });
-    } catch { toast({ variant: "destructive", title: "Failed to fix logins" }); }
-    finally { setFixingLogins(false); }
-  };
-
-  // ── Print portal ──────────────────────────────────────────────────────────────
-  const thI = { padding: "6px 8px", background: "#fef3c7", color: "#78350f", fontWeight: 700, fontSize: 9, textAlign: "left" as const, border: "1px solid #fcd34d" };
-  const td  = { padding: "6px 8px", border: "1px solid #e5e7eb", fontSize: 9, color: "#1f2937", background: "#ffffff" };
-
-  const printPortal = createPortal(
-    <div id="kips-print-portal" style={{ position: "absolute", left: "-99999px", top: "-99999px", fontFamily: "Arial, sans-serif", background: "white", color: "#111827" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 18, borderBottom: "3px solid #1e3a8a", paddingBottom: 14, marginBottom: 20 }}>
-        <img src="/kips-logo.jpeg" alt="KIPS" style={{ width: 80, height: 80, objectFit: "contain" }} />
-        <div style={{ flex: 1, textAlign: "center" }}>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900, color: "#1e3a8a" }}>KIPS School Hassari</h1>
-          <p style={{ margin: "3px 0 0", fontSize: 12, color: "#ea580c", fontWeight: 700 }}>Bright Future — School Portal</p>
-          <p style={{ margin: "4px 0 0", fontSize: 10, color: "#6b7280" }}>{printDate}</p>
-        </div>
-      </div>
-      <div style={{ textAlign: "center", marginBottom: 16 }}>
-        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: "#c2410c" }}>Fee Arrears Report</h2>
-        <p style={{ margin: "3px 0 0", fontSize: 10, color: "#6b7280" }}>All overdue unpaid/partial fees grouped by student</p>
-      </div>
-      {arrears.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "40px 0", color: "#9ca3af" }}>No arrears — all fees up to date</div>
-      ) : arrears.map((s, si) => (
-        <div key={s.studentId} style={{ marginBottom: 18, border: "2px solid #e07b1a", borderRadius: 8, overflow: "hidden" }}>
-          <div style={{ background: "#fff7ed", padding: "8px 12px", display: "flex", justifyContent: "space-between", borderBottom: "1px solid #fed7aa" }}>
-            <div>
-              <span style={{ fontWeight: 800, fontSize: 11, color: "#7c2d12" }}>{si + 1}. {s.studentName}</span>
-              <span style={{ marginLeft: 10, fontSize: 9, color: "#92400e", fontFamily: "monospace" }}>{s.admissionNumber}</span>
-              <span style={{ marginLeft: 8, fontSize: 9, color: "#6b7280" }}>{s.className}</span>
-            </div>
-            <div style={{ textAlign: "right" }}>
-              <p style={{ margin: 0, fontSize: 8, color: "#6b7280" }}>Total Arrears</p>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 900, color: "#b91c1c" }}>PKR {s.totalArrears.toLocaleString()}</p>
-            </div>
-          </div>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead><tr>{["Month","Description","Fee","Paid","Remaining","Fine","Total Due"].map(h => <th key={h} style={thI}>{h}</th>)}</tr></thead>
-            <tbody>
-              {s.rows.map(r => (
-                <tr key={r.id}>
-                  <td style={td}>{r.month}</td>
-                  <td style={{ ...td, color: "#4b5563", fontStyle: r.notes ? "normal" : "italic" }}>{r.notes ?? "—"}</td>
-                  <td style={td}>PKR {r.amount.toLocaleString()}</td>
-                  <td style={{ ...td, color: "#059669" }}>{r.paidAmount > 0 ? `PKR ${r.paidAmount.toLocaleString()}` : "—"}</td>
-                  <td style={{ ...td, color: "#b91c1c" }}>PKR {r.remaining.toLocaleString()}</td>
-                  <td style={{ ...td, color: "#c2410c" }}>{r.fine > 0 ? `PKR ${r.fine.toLocaleString()}` : "—"}</td>
-                  <td style={{ ...td, fontWeight: 700, color: "#7f1d1d" }}>PKR {(r.remaining + r.fine).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
-      {arrears.length > 0 && (
-        <div style={{ border: "2px solid #7f1d1d", borderRadius: 8, padding: "12px 16px", background: "#fef2f2", display: "flex", justifyContent: "space-between", marginTop: 10 }}>
-          <p style={{ margin: 0, fontWeight: 800, fontSize: 12, color: "#7f1d1d" }}>Grand Total Arrears</p>
-          <p style={{ margin: 0, fontWeight: 900, fontSize: 22, color: "#991b1b" }}>PKR {grandTotal.toLocaleString()}</p>
-        </div>
-      )}
-    </div>,
-    document.body
-  );
-
-  // ── Loading ───────────────────────────────────────────────────────────────────
-  const isLoading = feesLoading || studentsLoading || classesLoading;
-
-  // ── Render ────────────────────────────────────────────────────────────────────
   return (
-    <>
-      {printPortal}
-
-      <div className="space-y-5">
-        {/* Page header */}
-        <div className="flex items-center justify-between no-print">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center shadow-md"
+            style={{ background: "linear-gradient(135deg,#dc2626,#b91c1c)" }}>
+            <AlertTriangle className="w-5 h-5 text-white" />
+          </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <ClipboardList className="w-6 h-6 text-orange-600" /> Arrears &amp; Promotion
-            </h1>
-            <p className="text-gray-500 text-sm mt-0.5">Manage fee arrears and promote students to next class</p>
-          </div>
-          <div className="flex gap-2">
-            {activeTab === "arrears" && (
-              <>
-                <Button onClick={() => { setForm(emptyForm()); setAddOpen(true); }}
-                  className="bg-orange-600 hover:bg-orange-700 text-white">
-                  <Plus className="w-4 h-4 mr-1.5" /> Add Arrear
-                </Button>
-                <Button variant="outline" onClick={() => window.print()}>
-                  <Printer className="w-4 h-4 mr-1.5" /> Print
-                </Button>
-              </>
-            )}
+            <h1 className="text-2xl font-bold text-gray-900">Arrears</h1>
+            <p className="text-sm text-gray-500">Overdue and outstanding fee records</p>
           </div>
         </div>
+        {isAdmin && (
+          <Button onClick={() => setAddOpen(true)}
+            style={{ background: `linear-gradient(135deg, ${NAVY}, #2d4a9e)` }}
+            className="text-white">
+            <Plus className="w-4 h-4 mr-2" /> Add Arrear
+          </Button>
+        )}
+      </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit no-print">
-          {([
-            { key: "arrears",   label: "Fee Arrears",      icon: AlertTriangle },
-            { key: "promotion", label: "Student Promotion", icon: GraduationCap },
-          ] as const).map(t => (
-            <button key={t.key} onClick={() => setActiveTab(t.key)}
-              className={cn("flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-all",
-                activeTab === t.key ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}>
-              <t.icon className="w-4 h-4" /> {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* ── TAB: FEE ARREARS ──────────────────────────────────────────────────── */}
-        {activeTab === "arrears" && (
-          isLoading ? (
-            <div className="space-y-3">{[1,2,3].map(i => <Skeleton key={i} className="h-40 w-full" />)}</div>
-          ) : arrears.length === 0 ? (
-            <Card>
-              <CardContent className="py-16 text-center">
-                <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
-                <p className="text-gray-600 font-semibold">No arrears found</p>
-                <p className="text-gray-400 text-sm mt-1">All fees are up to date</p>
-                <Button className="mt-5 bg-orange-600 hover:bg-orange-700 text-white" onClick={() => { setForm(emptyForm()); setAddOpen(true); }}>
-                  <Plus className="w-4 h-4 mr-1.5" /> Add Previous Arrear
-                </Button>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total Arrear Records", value: records.length,                                              icon: ReceiptText,  bg: "linear-gradient(135deg,#dc2626,#b91c1c)"  },
+          { label: "Students Affected",    value: uniqueStudents,                                              icon: Users,        bg: `linear-gradient(135deg,${ORANGE},#c96a10)` },
+          { label: "Outstanding Amount",   value: `PKR ${totalOutstanding.toLocaleString()}`,                  icon: DollarSign,   bg: `linear-gradient(135deg,${NAVY},#2d4a9e)`  },
+          { label: "Partial Payments",     value: `${partialCount} record${partialCount !== 1 ? "s" : ""}`,   icon: TrendingDown, bg: "linear-gradient(135deg,#7c3aed,#5b21b6)"  },
+        ].map(c => {
+          const Icon = c.icon;
+          return (
+            <Card key={c.label} className="border-0 shadow-sm overflow-hidden">
+              <CardContent className="p-0">
+                <div className="p-4 flex items-start justify-between" style={{ background: c.bg }}>
+                  <div>
+                    <p className="text-white/70 text-xs font-semibold uppercase tracking-wide">{c.label}</p>
+                    <p className="text-white text-lg font-bold mt-1">{c.value}</p>
+                  </div>
+                  <Icon className="w-6 h-6 text-white/40" />
+                </div>
               </CardContent>
             </Card>
-          ) : (
-            <div className="space-y-4">
-              {/* Summary bar */}
-              <div className="grid grid-cols-3 gap-3">
-                {[
-                  { label: "Students with Arrears", value: arrears.length, color: "blue" },
-                  { label: "Total Overdue Records",  value: overdueFees.length, color: "orange" },
-                  { label: "Grand Total Arrears",    value: `PKR ${grandTotal.toLocaleString()}`, color: "red" },
-                ].map(s => (
-                  <div key={s.label} className={cn("rounded-xl border p-4 text-center",
-                    s.color === "blue"   ? "bg-blue-50 border-blue-200"   :
-                    s.color === "orange" ? "bg-orange-50 border-orange-200" : "bg-red-50 border-red-200")}>
-                    <p className={cn("text-xs font-semibold uppercase tracking-wide",
-                      s.color === "blue" ? "text-blue-500" : s.color === "orange" ? "text-orange-500" : "text-red-500")}>{s.label}</p>
-                    <p className={cn("text-2xl font-extrabold mt-1",
-                      s.color === "blue" ? "text-blue-700" : s.color === "orange" ? "text-orange-700" : "text-red-700")}>{s.value}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Per-student cards */}
-              {arrears.map(s => (
-                <Card key={s.studentId} className="overflow-hidden border-l-4 border-l-orange-500">
-                  {/* Student header */}
-                  <div className="bg-orange-50 border-b border-orange-100 px-5 py-3 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-bold text-gray-900 text-base">{s.studentName}</h3>
-                      <div className="flex gap-3 text-xs text-gray-500 mt-0.5">
-                        <span className="font-mono text-purple-600 font-semibold">{s.admissionNumber}</span>
-                        <span className="bg-gray-100 px-2 py-0.5 rounded-full">{s.className}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-400">Total Outstanding</p>
-                      <p className="text-xl font-extrabold text-red-600">PKR {s.totalArrears.toLocaleString()}</p>
-                    </div>
-                  </div>
-
-                  {/* Rows */}
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-gray-50 border-b text-xs text-gray-500 uppercase tracking-wide">
-                            <th className="text-left px-4 py-2.5">Month</th>
-                            <th className="text-left px-4 py-2.5">Description</th>
-                            <th className="text-right px-4 py-2.5">Fee</th>
-                            <th className="text-right px-4 py-2.5">Paid</th>
-                            <th className="text-right px-4 py-2.5">Remaining</th>
-                            <th className="text-right px-4 py-2.5">Fine</th>
-                            <th className="text-right px-4 py-2.5">Total Due</th>
-                            <th className="text-center px-4 py-2.5">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {s.rows.map((row, ri) => (
-                            <tr key={row.id} className={cn("border-b last:border-0 transition-colors hover:bg-gray-50", ri % 2 === 0 ? "bg-white" : "bg-gray-50/30")}>
-                              <td className="px-4 py-3 font-semibold text-gray-800">{row.month}</td>
-                              <td className="px-4 py-3 max-w-[180px]">
-                                {row.notes
-                                  ? <span className="text-gray-700">{row.notes}</span>
-                                  : <span className="text-gray-300 italic text-xs">No description</span>}
-                              </td>
-                              <td className="px-4 py-3 text-right text-gray-600">PKR {row.amount.toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-green-600">
-                                {row.paidAmount > 0 ? `PKR ${row.paidAmount.toLocaleString()}` : <span className="text-gray-300">—</span>}
-                              </td>
-                              <td className="px-4 py-3 text-right font-semibold text-red-600">PKR {row.remaining.toLocaleString()}</td>
-                              <td className="px-4 py-3 text-right text-orange-600">
-                                {row.fine > 0 ? `PKR ${row.fine.toLocaleString()}` : <span className="text-gray-300">—</span>}
-                              </td>
-                              <td className="px-4 py-3 text-right font-bold text-red-700">
-                                PKR {(row.remaining + row.fine).toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex items-center justify-center gap-1.5">
-                                  <button
-                                    onClick={() => openEdit(row, s.studentName)}
-                                    className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors"
-                                    title="Edit arrear">
-                                    <Pencil className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => { setDeleteRow({ ...row, studentName: s.studentName }); setDeleteOpen(true); }}
-                                    className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors"
-                                    title="Delete arrear">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-
-              {/* Grand total */}
-              <div className="flex justify-end">
-                <div className="bg-red-50 border border-red-200 rounded-xl px-6 py-3 text-right">
-                  <p className="text-sm text-gray-500">Grand Total Arrears</p>
-                  <p className="text-2xl font-extrabold text-red-700">PKR {grandTotal.toLocaleString()}</p>
-                </div>
-              </div>
-            </div>
-          )
-        )}
-
-        {/* ── TAB: STUDENT PROMOTION ─────────────────────────────────────────── */}
-        {activeTab === "promotion" && (
-          <div className="space-y-4">
-            <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 flex items-start gap-3">
-              <TrendingUp className="w-5 h-5 text-indigo-500 mt-0.5 shrink-0" />
-              <div>
-                <p className="text-sm font-semibold text-indigo-800">Annual Student Promotion</p>
-                <p className="text-xs text-indigo-600 mt-0.5">Promote a class to the next level. Fee amounts auto-update based on target class fee structure.</p>
-              </div>
-            </div>
-
-            {/* Staff credentials card */}
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <KeyRound className="w-4 h-4 text-slate-600" />
-                <p className="text-sm font-semibold text-slate-800">Staff Login Credentials</p>
-              </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div className="bg-white rounded-lg border border-slate-200 p-3">
-                  <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Username Format</p>
-                  <p className="font-mono font-semibold text-slate-700">firstname.lastname.staff</p>
-                  <p className="text-xs text-slate-400 mt-1">e.g. ali.khan.staff</p>
-                </div>
-                <div className="bg-white rounded-lg border border-slate-200 p-3">
-                  <p className="text-xs text-slate-400 uppercase tracking-wide mb-1">Default Password</p>
-                  <p className="font-mono font-semibold text-slate-700">kips123</p>
-                  <p className="text-xs text-slate-400 mt-1">Can be changed after first login</p>
-                </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 border border-amber-100 px-3 py-2.5">
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                  <p className="text-xs text-amber-700">Old staff missing login? Click to create accounts for all staff.</p>
-                </div>
-                <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 hover:bg-amber-100 text-xs h-7 shrink-0"
-                  onClick={handleFixLogins} disabled={fixingLogins}>
-                  {fixingLogins ? "Fixing..." : "Fix Logins"}
-                </Button>
-              </div>
-            </div>
-
-            {/* Class cards */}
-            {isLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[1,2,3,4,5,6].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}
-              </div>
-            ) : classSummaries.length === 0 ? (
-              <Card><CardContent className="py-16 text-center">
-                <GraduationCap className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500">No classes with active students</p>
-              </CardContent></Card>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {classSummaries.map(({ cls, idx, total, arrearCount, clearCount }) => {
-                  const g = getGradient(idx);
-                  return (
-                    <div key={cls.id} className="rounded-2xl overflow-hidden shadow-md hover:shadow-xl transition-shadow border" style={{ borderColor: g.border, background: g.light }}>
-                      <div className="px-5 py-4 text-white" style={{ background: `linear-gradient(135deg, ${g.from}, ${g.to})` }}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-widest opacity-80">Class</p>
-                            <h3 className="text-xl font-extrabold mt-0.5">{cls.name}</h3>
-                          </div>
-                          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
-                            <GraduationCap className="w-6 h-6 text-white" />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="px-5 py-3 space-y-2.5">
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-1.5"><Users className="w-3.5 h-3.5" style={{ color: g.from }} /><span className="text-sm font-medium" style={{ color: g.text }}>Total</span></div>
-                          <Badge style={{ background: g.from, color: "#fff", border: "none" }}>{total}</Badge>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5 text-green-500" /><span className="text-sm font-medium text-green-700">Fee Clear</span></div>
-                          <Badge className="bg-green-100 text-green-700 border-green-200">{clearCount}</Badge>
-                        </div>
-                        {arrearCount > 0 && (
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-1.5"><XCircle className="w-3.5 h-3.5 text-red-500" /><span className="text-sm font-medium text-red-700">With Arrears</span></div>
-                            <Badge className="bg-red-100 text-red-700 border-red-200">{arrearCount}</Badge>
-                          </div>
-                        )}
-                      </div>
-                      <div className="px-5 pb-4">
-                        <button
-                          onClick={() => { setSelectedFromClass(cls.id); setSelectedToClassId(""); setIncludeArrears(false); setPromoteOpen(true); }}
-                          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm text-white hover:opacity-90 transition-opacity"
-                          style={{ background: `linear-gradient(135deg, ${g.from}, ${g.to})` }}>
-                          Promote Class <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
+          );
+        })}
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* ADD ARREAR DIALOG */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5 text-orange-500" /> Add Previous Arrear</DialogTitle>
-            <DialogDescription>Manually add an unpaid fee record. It will appear in the student's fee section automatically.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-1">
-            <div className="space-y-1.5">
-              <Label>Student <span className="text-red-500">*</span></Label>
-              <Select value={form.studentId} onValueChange={v => setForm(f => ({ ...f, studentId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Select student" /></SelectTrigger>
-                <SelectContent className="max-h-60">
-                  {(students ?? []).filter(s => s.status === "active").sort((a, b) => a.name.localeCompare(b.name)).map(s => (
-                    <SelectItem key={s.id} value={String(s.id)}>
-                      {s.name} — {s.admissionNumber} ({(s as Record<string, unknown>).className as string ?? "No Class"})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Filters */}
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex flex-wrap gap-3 items-end">
+            <div className="flex-1 min-w-48 relative">
+              <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+              <Input className="pl-9" placeholder="Search student name, admission no., class..." value={search}
+                onChange={e => setSearch(e.target.value)} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Month <span className="text-red-500">*</span></Label>
-                <Input type="month" value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Due Date <span className="text-red-500">*</span></Label>
-                <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Amount (PKR) <span className="text-red-500">*</span></Label>
-                <Input type="number" placeholder="e.g. 2500" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fine (PKR)</Label>
-                <Input type="number" placeholder="0" value={form.fine} onChange={e => setForm(f => ({ ...f, fine: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description / Notes</Label>
-              <Textarea placeholder="e.g. Previous year arrear 2024-25, Annual charges, etc." rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-2 text-xs text-blue-700">
-              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-              This record will be saved as "unpaid" and will automatically appear in the Fee Arrears list and the student's fee details.
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
-            <Button onClick={handleAdd} disabled={saving} className="bg-orange-600 hover:bg-orange-700 text-white">
-              {saving ? "Saving..." : "Add Arrear"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* EDIT ARREAR DIALOG */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5 text-blue-500" /> Edit Arrear</DialogTitle>
-            <DialogDescription>
-              Student: <strong>{editRow?.studentName}</strong>
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Month</Label>
-                <Input type="month" value={form.month} onChange={e => setForm(f => ({ ...f, month: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Due Date</Label>
-                <Input type="date" value={form.dueDate} onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Amount (PKR)</Label>
-                <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Fine (PKR)</Label>
-                <Input type="number" value={form.fine} onChange={e => setForm(f => ({ ...f, fine: e.target.value }))} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description / Notes</Label>
-              <Textarea placeholder="Description of this arrear..." rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button onClick={handleEdit} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white">
-              {saving ? "Saving..." : "Save Changes"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* DELETE CONFIRMATION DIALOG */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600"><Trash2 className="w-5 h-5" /> Delete Arrear?</DialogTitle>
-            <DialogDescription>
-              This will permanently delete the arrear record for <strong>{deleteRow?.studentName}</strong> — Month: <strong>{deleteRow?.month}</strong>, Amount: <strong>PKR {deleteRow?.amount.toLocaleString()}</strong>.
-              This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-            <Button onClick={handleDelete} disabled={deleting} variant="destructive">
-              {deleting ? "Deleting..." : "Yes, Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* PROMOTION DIALOG */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      <Dialog open={promoteOpen} onOpenChange={setPromoteOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><GraduationCap className="w-5 h-5 text-indigo-600" /> Promote Students</DialogTitle>
-            <DialogDescription>Move students from <strong>{fromInfo?.cls.name}</strong> to the selected class.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-center">
-                <p className="text-xs text-indigo-500 font-semibold uppercase">From</p>
-                <p className="font-bold text-indigo-800 mt-0.5">{fromInfo?.cls.name ?? "—"}</p>
-              </div>
-              <ArrowRight className="w-5 h-5 text-gray-400 shrink-0" />
-              <div className="flex-1">
-                <Select value={selectedToClassId} onValueChange={setSelectedToClassId}>
-                  <SelectTrigger><SelectValue placeholder="Select target class" /></SelectTrigger>
-                  <SelectContent>
-                    {(classes ?? []).filter(c => c.id !== selectedFromClass).map(c => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border bg-gray-50 px-4 py-3">
-              <div>
-                <Label htmlFor="inc-arrears" className="font-semibold text-sm cursor-pointer">Include students with arrears</Label>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {includeArrears
-                    ? `All ${fromInfo?.total ?? 0} students will be promoted`
-                    : `${fromInfo?.clearCount ?? 0} promoted · ${fromInfo?.arrearCount ?? 0} held back`}
-                </p>
-              </div>
-              <Switch id="inc-arrears" checked={includeArrears} onCheckedChange={setIncludeArrears} />
-            </div>
-            {selectedToClassId && (
-              <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 space-y-1.5">
-                <p className="text-sm font-semibold text-green-800">Summary</p>
-                <div className="text-xs text-green-700 space-y-1">
-                  <div className="flex justify-between"><span>Students to promote:</span><span className="font-bold">{eligible.length}</span></div>
-                  {!includeArrears && (fromInfo?.arrearCount ?? 0) > 0 && (
-                    <div className="flex justify-between text-orange-600"><span>Held back (arrears):</span><span className="font-bold">{fromInfo?.arrearCount}</span></div>
-                  )}
-                  <div className="flex justify-between text-gray-500"><span>Fee auto-update:</span><span className="font-bold">Yes</span></div>
-                </div>
-              </div>
+            <Select value={filterClass} onValueChange={setFilterClass}>
+              <SelectTrigger className="w-40"><SelectValue placeholder="All classes" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Classes</SelectItem>
+                {classes?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-36"><SelectValue placeholder="All status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="unpaid">Unpaid</SelectItem>
+                <SelectItem value="partial">Partial</SelectItem>
+              </SelectContent>
+            </Select>
+            {(search || filterClass !== "all" || filterStatus !== "all") && (
+              <Button variant="ghost" size="sm" onClick={() => { setSearch(""); setFilterClass("all"); setFilterStatus("all"); }}>
+                <X className="w-4 h-4 mr-1" /> Clear
+              </Button>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPromoteOpen(false)}>Cancel</Button>
-            <Button onClick={handlePromote} disabled={!selectedToClassId || eligible.length === 0 || promoting} className="bg-indigo-600 hover:bg-indigo-700 text-white">
-              {promoting ? "Promoting..." : `Promote ${eligible.length} Students`}
+        </CardContent>
+      </Card>
+
+      {/* Records List */}
+      <Card>
+        <CardHeader className="pb-2 border-b">
+          <CardTitle className="text-base flex items-center gap-2" style={{ color: NAVY }}>
+            <AlertTriangle className="w-4 h-4 text-red-600" />
+            Arrear Records ({filtered.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="space-y-3 p-4">
+              {[1,2,3,4].map(i => <Skeleton key={i} className="h-14 w-full" />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <AlertTriangle className="w-12 h-12 mx-auto mb-3 text-gray-200" />
+              <p className="font-medium">No arrear records found</p>
+              {records.length > 0 && <p className="text-sm mt-1">Try adjusting your filters</p>}
+              {records.length === 0 && <p className="text-sm mt-1 text-emerald-600">All fees are up to date!</p>}
+            </div>
+          ) : (
+            <div className="divide-y">
+              {filtered.map(record => (
+                <div key={record.id} className="p-4 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-white font-bold text-sm shadow"
+                        style={{ background: "linear-gradient(135deg,#dc2626,#b91c1c)" }}>
+                        {(record.studentName ?? "?").charAt(0)}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900 truncate">{record.studentName ?? "Unknown student"}</p>
+                        <p className="text-xs text-gray-500">
+                          {record.admissionNumber ?? "—"} · {record.className ?? "No class"}
+                          {record.fatherName ? ` · s/o ${record.fatherName}` : ""}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          {statusBadge(record.status, record.remainingAmount)}
+                          <span className="text-xs text-gray-400 flex items-center gap-1">
+                            <CalendarDays className="w-3 h-3" />
+                            {record.month} · Due: {record.dueDate}
+                          </span>
+                          {record.notes && (
+                            <span className="text-xs text-amber-600 italic">"{record.notes}"</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="font-black text-lg text-red-600">PKR {record.remainingAmount.toLocaleString()}</p>
+                      <p className="text-xs text-gray-400">Total: {record.amount.toLocaleString()}</p>
+                      {record.fine > 0 && <p className="text-xs text-red-500">Fine: +{record.fine.toLocaleString()}</p>}
+                      {record.paidAmount > 0 && <p className="text-xs text-emerald-600">Paid: {record.paidAmount.toLocaleString()}</p>}
+                    </div>
+
+                    <div className="flex gap-1.5 shrink-0">
+                      <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-blue-600"
+                        onClick={() => setExpandedId(expandedId === record.id ? null : record.id)}>
+                        {expandedId === record.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </Button>
+                      {isAdmin && (
+                        <>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-blue-600"
+                            onClick={() => setEditRecord(record)}>
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-red-600"
+                            onClick={() => { setDeleteId(record.id); setDeleteStudName(record.studentName ?? ""); }}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expanded breakdown */}
+                  {expandedId === record.id && (
+                    <div className="mt-3 ml-12 p-3 rounded-lg bg-gray-50 border border-gray-200 text-xs space-y-1.5">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          { label: "Original Amount", value: `PKR ${record.amount.toLocaleString()}`,        color: "" },
+                          { label: "Fine",            value: `PKR ${record.fine.toLocaleString()}`,          color: record.fine > 0 ? "text-red-600" : "" },
+                          { label: "Paid So Far",     value: `PKR ${record.paidAmount.toLocaleString()}`,    color: record.paidAmount > 0 ? "text-emerald-600" : "" },
+                          { label: "Still Owed",      value: `PKR ${record.remainingAmount.toLocaleString()}`, color: "text-red-700 font-bold" },
+                        ].map(f => (
+                          <div key={f.label}>
+                            <p className="text-gray-400 uppercase tracking-wide" style={{ fontSize: 9 }}>{f.label}</p>
+                            <p className={`font-semibold mt-0.5 ${f.color}`}>{f.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Dialog */}
+      <ArrearDialog open={addOpen} title="Add Arrear Record"
+        students={students} classes={classes ?? []}
+        onClose={() => setAddOpen(false)} onSave={handleSaveAdd} />
+
+      {/* Edit Dialog */}
+      {editRecord && (
+        <ArrearDialog open={!!editRecord} title="Edit Arrear Record"
+          students={students} classes={classes ?? []}
+          initial={editRecord}
+          onClose={() => setEditRecord(null)} onSave={handleSaveEdit} />
+      )}
+
+      {/* Delete Confirm */}
+      <Dialog open={!!deleteId} onOpenChange={v => !v && setDeleteId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete Arrear Record?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-gray-600 py-2">
+            This will permanently remove the arrear record for <strong>{deleteStudName}</strong>.
+          </p>
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete
             </Button>
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
