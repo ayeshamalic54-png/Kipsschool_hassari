@@ -32,7 +32,7 @@ const FEE_TYPES = [
   { key: "exam",      label: "Exam Fee",       icon: FlaskConical,  light: "bg-orange-50", text: "text-orange-600" },
   { key: "annual",    label: "Annual Charges", icon: BookOpen,      light: "bg-green-50",  text: "text-green-600"  },
   { key: "transport", label: "Transport Fee",  icon: Bus,           light: "bg-rose-50",   text: "text-rose-600"   },
-  { key: "Arrears",    label:"Previous Arrears", icon: BookOpen,      light: "bg-green-50",  text: "text-green-600"  },
+  { key: "previous",  label: "Previous Balance", icon: DollarSign,  light: "bg-amber-50",  text: "text-amber-600"  },
 ] as const;
 
 type FeeKey = typeof FEE_TYPES[number]["key"];
@@ -45,7 +45,7 @@ interface FeeRow {
   exam:      number;
   annual:    number;
   transport: number;
-  Arrears: number;
+  previous:  number;
 }
 type FeesMap = Record<number, FeeRow>;
 
@@ -81,6 +81,7 @@ function toBackend(fees: Omit<FeeRow, "id">) {
     examFee:      fees.exam,
     libraryFee:   fees.annual,
     transportFee: fees.transport,
+    previousFee:  fees.previous,
   };
 }
 
@@ -93,6 +94,7 @@ function fromBackend(row: Record<string, unknown>): FeeRow {
     exam:      Number(row.examFee      ?? 0),
     annual:    Number(row.libraryFee   ?? 0),
     transport: Number(row.transportFee ?? 0),
+    previous:  Number(row.previousFee  ?? 0),
   };
 }
 
@@ -297,6 +299,7 @@ export default function FeeStructure() {
         exam:      fees.exam      ?? 0,
         annual:    fees.annual    ?? 0,
         transport: fees.transport ?? 0,
+        previous:  fees.previous  ?? 0,
       });
       const res = await fetch("/api/fee-structures", {
         method:  "POST",
