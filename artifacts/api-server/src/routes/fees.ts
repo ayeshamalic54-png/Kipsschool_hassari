@@ -12,7 +12,12 @@ const router = Router();
 async function enrichFee(fee: Record<string, unknown>) {
   const studentId = Number(fee.studentId);
   const [student] = await db
-    .select({ name: studentsTable.name, admissionNumber: studentsTable.admissionNumber, classId: studentsTable.classId })
+    .select({
+      name: studentsTable.name,
+      admissionNumber: studentsTable.admissionNumber,
+      classId: studentsTable.classId,
+      fatherName: studentsTable.fatherName,
+    })
     .from(studentsTable)
     .where(eq(studentsTable.id, studentId));
   let className = null;
@@ -36,6 +41,9 @@ async function enrichFee(fee: Record<string, unknown>) {
     remainingAmount: Math.max(0, amount + fine - discount - paidAmount),
     studentName: student?.name ?? null,
     admissionNumber: student?.admissionNumber ?? null,
+    fatherName: student?.fatherName ?? null,
+    // FIX: include classId so frontend class filter works correctly
+    classId: student?.classId ?? null,
     className,
   };
 }
@@ -90,7 +98,7 @@ router.post("/", requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/fees/:id  ← Admin: edit fee record (amount, month, dueDate, fine, notes)
+// PUT /api/fees/:id  — Admin: edit fee record (amount, month, dueDate, fine, notes)
 router.put("/:id", requireAuth, async (req, res) => {
   try {
     const reqUser = (req as AuthReq).user;
