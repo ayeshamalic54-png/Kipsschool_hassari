@@ -22,7 +22,8 @@ router.get("/", requireAuth, async (req, res) => {
       examFee:      toNum(r.examFee),
       libraryFee:   toNum(r.libraryFee),
       transportFee: toNum(r.transportFee),
-      Arrears:      toNum(r.Arrears),
+      // FIX: consistently use "Arrears" field name
+      Arrears:      toNum((r as Record<string, unknown>).Arrears ?? 0),
     })));
   } catch (err) {
     req.log.error(err);
@@ -45,7 +46,8 @@ router.get("/class/:classId", requireAuth, async (req, res) => {
       examFee:      toNum(row.examFee),
       libraryFee:   toNum(row.libraryFee),
       transportFee: toNum(row.transportFee),
-      ArrearsFee: toNum(row.ArrearsFee),
+      // FIX: was using wrong field name "ArrearsFee" — now consistently "Arrears"
+      Arrears:      toNum((row as Record<string, unknown>).Arrears ?? 0),
     });
   } catch (err) {
     req.log.error(err);
@@ -59,7 +61,7 @@ router.post("/", requireAuth, async (req, res) => {
     const reqUser = (req as AuthReq).user;
     if (reqUser.role !== "admin") { res.status(403).json({ error: "Admin only" }); return; }
 
-    const { classId, monthlyFee, admissionFee, examFee, libraryFee, transportFee } = req.body;
+    const { classId, monthlyFee, admissionFee, examFee, libraryFee, transportFee, Arrears } = req.body;
     if (!classId || !monthlyFee) {
       res.status(400).json({ error: "classId and monthlyFee are required" });
       return;
@@ -70,26 +72,29 @@ router.post("/", requireAuth, async (req, res) => {
 
     const [existing] = await db.select().from(feeStructuresTable).where(eq(feeStructuresTable.classId, Number(classId)));
 
-    let row;
+    // FIX: include Arrears in both insert and update
+    const feeValues = {
+      className,
+      monthlyFee:   String(monthlyFee   ?? 0),
+      admissionFee: String(admissionFee ?? 0),
+      examFee:      String(examFee      ?? 0),
+      libraryFee:   String(libraryFee   ?? 0),
+      transportFee: String(transportFee ?? 0),
+      Arrears:      String(Arrears      ?? 0),
+    };
+
+    let row: Record<string, unknown>;
     if (existing) {
-      [row] = await db.update(feeStructuresTable).set({
-        className,
-        monthlyFee:   String(monthlyFee   ?? 0),
-        admissionFee: String(admissionFee ?? 0),
-        examFee:      String(examFee      ?? 0),
-        libraryFee:   String(libraryFee   ?? 0),
-        transportFee: String(transportFee ?? 0),
-      }).where(eq(feeStructuresTable.id, existing.id)).returning();
+      const [updated] = await db.update(feeStructuresTable)
+        .set(feeValues as never)
+        .where(eq(feeStructuresTable.id, existing.id))
+        .returning();
+      row = updated as Record<string, unknown>;
     } else {
-      [row] = await db.insert(feeStructuresTable).values({
-        classId:      Number(classId),
-        className,
-        monthlyFee:   String(monthlyFee   ?? 0),
-        admissionFee: String(admissionFee ?? 0),
-        examFee:      String(examFee      ?? 0),
-        libraryFee:   String(libraryFee   ?? 0),
-        transportFee: String(transportFee ?? 0),
-      }).returning();
+      const [inserted] = await db.insert(feeStructuresTable)
+        .values({ classId: Number(classId), ...feeValues } as never)
+        .returning();
+      row = inserted as Record<string, unknown>;
     }
 
     res.status(existing ? 200 : 201).json({
@@ -99,6 +104,7 @@ router.post("/", requireAuth, async (req, res) => {
       examFee:      toNum(row.examFee),
       libraryFee:   toNum(row.libraryFee),
       transportFee: toNum(row.transportFee),
+      Arrears:      toNum(row.Arrears),
     });
   } catch (err) {
     req.log.error(err);
@@ -115,23 +121,28 @@ router.put("/:id", requireAuth, async (req, res) => {
     const [existing] = await db.select().from(feeStructuresTable).where(eq(feeStructuresTable.id, Number(req.params.id)));
     if (!existing) { res.status(404).json({ error: "Not found" }); return; }
 
-    const { monthlyFee, admissionFee, examFee, libraryFee, transportFee } = req.body;
+    const { monthlyFee, admissionFee, examFee, libraryFee, transportFee, Arrears } = req.body;
+    const existingExt = existing as Record<string, unknown>;
 
+    // FIX: include Arrears in update
     const [updated] = await db.update(feeStructuresTable).set({
       monthlyFee:   monthlyFee   !== undefined ? String(monthlyFee)   : existing.monthlyFee   ?? "0",
       admissionFee: admissionFee !== undefined ? String(admissionFee) : existing.admissionFee ?? "0",
       examFee:      examFee      !== undefined ? String(examFee)      : existing.examFee      ?? "0",
       libraryFee:   libraryFee   !== undefined ? String(libraryFee)   : existing.libraryFee   ?? "0",
       transportFee: transportFee !== undefined ? String(transportFee) : existing.transportFee ?? "0",
-    }).where(eq(feeStructuresTable.id, Number(req.params.id))).returning();
+      Arrears:      Arrears      !== undefined ? String(Arrears)      : String(existingExt.Arrears ?? "0"),
+    } as never).where(eq(feeStructuresTable.id, Number(req.params.id))).returning();
 
+    const updatedExt = updated as Record<string, unknown>;
     res.json({
       ...updated,
-      monthlyFee:   toNum(updated.monthlyFee),
-      admissionFee: toNum(updated.admissionFee),
-      examFee:      toNum(updated.examFee),
-      libraryFee:   toNum(updated.libraryFee),
-      transportFee: toNum(updated.transportFee),
+      monthlyFee:   toNum(updatedExt.monthlyFee),
+      admissionFee: toNum(updatedExt.admissionFee),
+      examFee:      toNum(updatedExt.examFee),
+      libraryFee:   toNum(updatedExt.libraryFee),
+      transportFee: toNum(updatedExt.transportFee),
+      Arrears:      toNum(updatedExt.Arrears),
     });
   } catch (err) {
     req.log.error(err);
