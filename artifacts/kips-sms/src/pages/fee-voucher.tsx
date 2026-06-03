@@ -40,7 +40,10 @@ const ORANGE = "#e07b1a";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface VoucherEdit {
-  feeOverride: string;
+  feeOverride: string; // monthly tuition
+  examOverride: string;
+  annualOverride: string;
+  transportOverride: string;
   arrears:     string;
   fine:        string;
   discount:    string;
@@ -83,6 +86,7 @@ function authH(): HeadersInit {
 function VoucherCopy({
   copyLabel, student, selectedClassName, monthLabel, dueDate,
   voucherNo, structure, edit, fine, disc, total, monthlyFeeToUse,
+  examFeeToUse, annualFeeToUse, transportFeeToUse,
   previousArrears, manualArrears, selectedFees,
 }: {
   copyLabel:        string;
@@ -97,6 +101,9 @@ function VoucherCopy({
   disc:             number;
   total:            number;
   monthlyFeeToUse:  number;
+  examFeeToUse:     number;
+  annualFeeToUse:   number;
+  transportFeeToUse:number;
   previousArrears:  number;
   manualArrears:    number;
   selectedFees:     { monthly: boolean; exam: boolean; annual: boolean; transport: boolean; previous: boolean };
@@ -106,9 +113,9 @@ function VoucherCopy({
   // ALL fee components combined into one list — single voucher
   const feeRows: { label: string; amount: number; color?: string; prefix?: string }[] = [];
   if (selectedFees.monthly && monthlyFeeToUse  > 0) feeRows.push({ label: "Monthly Tuition Fee",     amount: monthlyFeeToUse  });
-  if (selectedFees.exam && structure?.examFee      && structure.examFee      > 0) feeRows.push({ label: "Exam / Test Fee",     amount: structure.examFee,      color: "#7c3aed" });
-  if (selectedFees.annual && structure?.libraryFee   && structure.libraryFee   > 0) feeRows.push({ label: "Annual Charges",      amount: structure.libraryFee,   color: "#0369a1" });
-  if (selectedFees.transport && structure?.transportFee && structure.transportFee > 0) feeRows.push({ label: "Transport Fee",       amount: structure.transportFee, color: "#0891b2" });
+  if (selectedFees.exam && examFeeToUse > 0) feeRows.push({ label: "Exam / Test Fee", amount: examFeeToUse, color: "#7c3aed" });
+  if (selectedFees.annual && annualFeeToUse > 0) feeRows.push({ label: "Annual Charges", amount: annualFeeToUse, color: "#0369a1" });
+  if (selectedFees.transport && transportFeeToUse > 0) feeRows.push({ label: "Transport Fee", amount: transportFeeToUse, color: "#0891b2" });
   if (selectedFees.previous && previousArrears > 0) feeRows.push({ label: "Previous Arrears (Auto)",  amount: previousArrears,  color: "#dc2626" });
   if (manualArrears   > 0) feeRows.push({ label: "Additional Arrears",       amount: manualArrears,    color: "#b91c1c" });
   if (fine            > 0) feeRows.push({ label: "Late Fine",                amount: fine,             color: "#dc2626" });
@@ -207,7 +214,7 @@ export default function FeeVoucher() {
   const [generated,     setGenerated]     = useState(false);
   const [edits,         setEdits]         = useState<Record<number, VoucherEdit>>({});
   const [editingId,     setEditingId]     = useState<number | null>(null);
-  const [draft,         setDraft]         = useState<VoucherEdit>({ feeOverride: "", arrears: "", fine: "", discount: "", note: "" });
+  const [draft,         setDraft]         = useState<VoucherEdit>({ feeOverride: "", examOverride: "", annualOverride: "", transportOverride: "", arrears: "", fine: "", discount: "", note: "" });
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [allFeeRecords, setAllFeeRecords] = useState<FeeRecord[]>([]);
   const [saving,        setSaving]        = useState(false);
@@ -292,7 +299,7 @@ export default function FeeVoucher() {
   const monthLabel        = month ? new Date(month + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" }) : "";
 
   const getEdit = (id: number): VoucherEdit =>
-    edits[id] ?? { feeOverride: "", arrears: "", fine: "", discount: "", note: "" };
+    edits[id] ?? { feeOverride: "", examOverride: "", annualOverride: "", transportOverride: "", arrears: "", fine: "", discount: "", note: "" };
 
   // Auto-calculate previous arrears for a student
   const getPreviousArrears = useCallback((studentId: number): number => {
@@ -311,12 +318,27 @@ export default function FeeVoucher() {
     return (e.feeOverride && Number(e.feeOverride) > 0) ? Number(e.feeOverride) : (structure?.monthlyFee ?? 0);
   };
 
+  const getExamFee = (studentId: number, structure?: FeeStructure): number => {
+    const e = getEdit(studentId);
+    return (e.examOverride && Number(e.examOverride) > 0) ? Number(e.examOverride) : (structure?.examFee ?? 0);
+  };
+
+  const getAnnualFee = (studentId: number, structure?: FeeStructure): number => {
+    const e = getEdit(studentId);
+    return (e.annualOverride && Number(e.annualOverride) > 0) ? Number(e.annualOverride) : (structure?.libraryFee ?? 0);
+  };
+
+  const getTransportFee = (studentId: number, structure?: FeeStructure): number => {
+    const e = getEdit(studentId);
+    return (e.transportOverride && Number(e.transportOverride) > 0) ? Number(e.transportOverride) : (structure?.transportFee ?? 0);
+  };
+
   const calcTotal = (studentId: number, structure?: FeeStructure): number => {
     const e             = getEdit(studentId);
     const monthly       = selectedFees.monthly ? getMonthlyFee(studentId, structure) : 0;
-    const exam          = selectedFees.exam ? (structure?.examFee ?? 0) : 0;
-    const library       = selectedFees.annual ? (structure?.libraryFee ?? 0) : 0;
-    const transport     = selectedFees.transport ? (structure?.transportFee ?? 0) : 0;
+    const exam          = selectedFees.exam ? getExamFee(studentId, structure) : 0;
+    const library       = selectedFees.annual ? getAnnualFee(studentId, structure) : 0;
+    const transport     = selectedFees.transport ? getTransportFee(studentId, structure) : 0;
     const fine          = Number(e.fine     || 0);
     const disc          = Number(e.discount || 0);
     const structArrears = selectedFees.previous ? (structure?.Arrears ?? 0) : 0;
@@ -330,7 +352,16 @@ export default function FeeVoucher() {
 
   const openEdit = (id: number) => {
     const e = getEdit(id);
-    setDraft({ feeOverride: e.feeOverride, arrears: e.arrears, fine: e.fine, discount: e.discount, note: e.note });
+    setDraft({ 
+      feeOverride: e.feeOverride, 
+      examOverride: e.examOverride,
+      annualOverride: e.annualOverride,
+      transportOverride: e.transportOverride,
+      arrears: e.arrears, 
+      fine: e.fine, 
+      discount: e.discount, 
+      note: e.note 
+    });
     setEditingId(id);
   };
   const saveEdit = (id: number) => {
@@ -388,9 +419,9 @@ export default function FeeVoucher() {
         const structure = student.classId ? feeStructureMap[student.classId] : undefined;
         const e         = getEdit(student.id);
         const monthly   = selectedFees.monthly ? getMonthlyFee(student.id, structure) : 0;
-        const exam      = selectedFees.exam ? (structure?.examFee ?? 0) : 0;
-        const annual    = selectedFees.annual ? (structure?.libraryFee ?? 0) : 0;
-        const transport = selectedFees.transport ? (structure?.transportFee ?? 0) : 0;
+        const exam      = selectedFees.exam ? getExamFee(student.id, structure) : 0;
+        const annual    = selectedFees.annual ? getAnnualFee(student.id, structure) : 0;
+        const transport = selectedFees.transport ? getTransportFee(student.id, structure) : 0;
         const arrears   = selectedFees.previous ? (getPreviousArrears(student.id) + (structure?.Arrears ?? 0)) : 0;
         const extraArrears = Number(e.arrears || 0);
 
@@ -652,16 +683,57 @@ export default function FeeVoucher() {
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Adjust Student Fee</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
-            <div>
-              <label className="text-sm font-medium text-gray-700 block mb-1">
-                Monthly Fee Override (PKR)
-                <span className="text-xs text-gray-400 ml-1">— leave blank to use class fee</span>
-              </label>
-              <Input type="number" min="0"
-                placeholder={`Class fee: PKR ${selectedStructure?.monthlyFee?.toLocaleString() ?? "0"}`}
-                value={draft.feeOverride}
-                onChange={e => setDraft(d => ({ ...d, feeOverride: e.target.value }))} />
-            </div>
+            {selectedFees.monthly && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">
+                  Monthly Fee Override (PKR)
+                  <span className="text-xs text-gray-400 ml-1">— leave blank to use class fee</span>
+                </label>
+                <Input type="number" min="0"
+                  placeholder={`Class fee: PKR ${selectedStructure?.monthlyFee?.toLocaleString() ?? "0"}`}
+                  value={draft.feeOverride}
+                  onChange={e => setDraft(d => ({ ...d, feeOverride: e.target.value }))} />
+              </div>
+            )}
+
+            {selectedFees.exam && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">
+                  Exam Fee Override (PKR)
+                  <span className="text-xs text-gray-400 ml-1">— leave blank to use class fee</span>
+                </label>
+                <Input type="number" min="0"
+                  placeholder={`Class fee: PKR ${selectedStructure?.examFee?.toLocaleString() ?? "0"}`}
+                  value={draft.examOverride}
+                  onChange={e => setDraft(d => ({ ...d, examOverride: e.target.value }))} />
+              </div>
+            )}
+
+            {selectedFees.annual && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">
+                  Annual Fee Override (PKR)
+                  <span className="text-xs text-gray-400 ml-1">— leave blank to use class fee</span>
+                </label>
+                <Input type="number" min="0"
+                  placeholder={`Class fee: PKR ${selectedStructure?.libraryFee?.toLocaleString() ?? "0"}`}
+                  value={draft.annualOverride}
+                  onChange={e => setDraft(d => ({ ...d, annualOverride: e.target.value }))} />
+              </div>
+            )}
+
+            {selectedFees.transport && (
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1">
+                  Transport Fee Override (PKR)
+                  <span className="text-xs text-gray-400 ml-1">— leave blank to use class fee</span>
+                </label>
+                <Input type="number" min="0"
+                  placeholder={`Class fee: PKR ${selectedStructure?.transportFee?.toLocaleString() ?? "0"}`}
+                  value={draft.transportOverride}
+                  onChange={e => setDraft(d => ({ ...d, transportOverride: e.target.value }))} />
+              </div>
+            )}
             <div>
               <label className="text-sm font-medium text-gray-700 block mb-1">
                 Additional Arrears (PKR)
@@ -693,11 +765,11 @@ export default function FeeVoucher() {
 
             {editingId !== null && (() => {
               const preview = Math.max(0,
-                (Number(draft.feeOverride) || selectedStructure?.monthlyFee || 0) +
-                (selectedStructure?.examFee      ?? 0) +
-                (selectedStructure?.libraryFee   ?? 0) +
-                (selectedStructure?.transportFee ?? 0) +
-                getPreviousArrears(editingId) +
+                (selectedFees.monthly ? (Number(draft.feeOverride) || selectedStructure?.monthlyFee || 0) : 0) +
+                (selectedFees.exam ? (Number(draft.examOverride) || selectedStructure?.examFee || 0) : 0) +
+                (selectedFees.annual ? (Number(draft.annualOverride) || selectedStructure?.libraryFee || 0) : 0) +
+                (selectedFees.transport ? (Number(draft.transportOverride) || selectedStructure?.transportFee || 0) : 0) +
+                (selectedFees.previous ? (getPreviousArrears(editingId) + (selectedStructure?.Arrears ?? 0)) : 0) +
                 (Number(draft.arrears)  || 0) +
                 (Number(draft.fine)     || 0) -
                 (Number(draft.discount) || 0)
@@ -733,10 +805,13 @@ export default function FeeVoucher() {
             const fine          = Number(e.fine     || 0);
             const disc          = Number(e.discount || 0);
             const monthly       = getMonthlyFee(student.id, structure);
+            const exam          = getExamFee(student.id, structure);
+            const annual        = getAnnualFee(student.id, structure);
+            const transport     = getTransportFee(student.id, structure);
             const autoArrears   = getPreviousArrears(student.id);
             const manualArrears = Number(e.arrears || 0);
             const total         = calcTotal(student.id, structure);
-            const hasEdits      = e.feeOverride || e.arrears || e.fine || e.discount || e.note;
+            const hasEdits      = e.feeOverride || e.examOverride || e.annualOverride || e.transportOverride || e.arrears || e.fine || e.discount || e.note;
 
             return (
               <Card key={student.id} className="border-2 border-gray-200 hover:border-blue-300 transition-colors">
@@ -762,9 +837,15 @@ export default function FeeVoucher() {
                         {selectedFees.monthly && monthly > 0 && (
                           <div>Monthly: PKR {monthly.toLocaleString()}{e.feeOverride ? " ✎" : ""}</div>
                         )}
-                        {selectedFees.exam && structure?.examFee && structure.examFee > 0 && <div>Exam: PKR {structure.examFee.toLocaleString()}</div>}
-                        {selectedFees.annual && structure?.libraryFee && structure.libraryFee > 0 && <div>Annual: PKR {structure.libraryFee.toLocaleString()}</div>}
-                        {selectedFees.transport && structure?.transportFee && structure.transportFee > 0 && <div>Transport: PKR {structure.transportFee.toLocaleString()}</div>}
+                        {selectedFees.exam && exam > 0 && (
+                          <div>Exam: PKR {exam.toLocaleString()}{e.examOverride ? " ✎" : ""}</div>
+                        )}
+                        {selectedFees.annual && annual > 0 && (
+                          <div>Annual: PKR {annual.toLocaleString()}{e.annualOverride ? " ✎" : ""}</div>
+                        )}
+                        {selectedFees.transport && transport > 0 && (
+                          <div>Transport: PKR {transport.toLocaleString()}{e.transportOverride ? " ✎" : ""}</div>
+                        )}
                         {selectedFees.previous && (autoArrears > 0 || (structure?.Arrears ?? 0) > 0) && (
                           <div className="text-red-600 font-medium">Arrears: PKR {(autoArrears + (structure?.Arrears ?? 0)).toLocaleString()}</div>
                         )}
@@ -800,6 +881,9 @@ export default function FeeVoucher() {
             const fine          = Number(e.fine     || 0);
             const disc          = Number(e.discount || 0);
             const monthly       = getMonthlyFee(student.id, structure);
+            const exam          = getExamFee(student.id, structure);
+            const annual        = getAnnualFee(student.id, structure);
+            const transport     = getTransportFee(student.id, structure);
             const autoArrears   = getPreviousArrears(student.id);
             const manualArrears = Number(e.arrears || 0);
             const total         = calcTotal(student.id, structure);
@@ -811,7 +895,11 @@ export default function FeeVoucher() {
                   student={student} selectedClassName={selectedClassName}
                   monthLabel={monthLabel} dueDate={dueDate} voucherNo={voucherNo}
                   structure={structure} edit={e} fine={fine} disc={disc} total={total}
-                  monthlyFeeToUse={monthly} previousArrears={autoArrears + (structure?.Arrears ?? 0)} manualArrears={manualArrears}
+                  monthlyFeeToUse={monthly}
+                  examFeeToUse={exam}
+                  annualFeeToUse={annual}
+                  transportFeeToUse={transport}
+                  previousArrears={autoArrears + (structure?.Arrears ?? 0)} manualArrears={manualArrears}
                   selectedFees={selectedFees} />
 
                 <div className="cut-line" style={{ borderTop: "1.5px dashed #9ca3af", margin: "4mm 0", textAlign: "center", fontSize: "8pt", color: "#9ca3af" }}>
@@ -822,7 +910,11 @@ export default function FeeVoucher() {
                   student={student} selectedClassName={selectedClassName}
                   monthLabel={monthLabel} dueDate={dueDate} voucherNo={voucherNo}
                   structure={structure} edit={e} fine={fine} disc={disc} total={total}
-                  monthlyFeeToUse={monthly} previousArrears={autoArrears + (structure?.Arrears ?? 0)} manualArrears={manualArrears}
+                  monthlyFeeToUse={monthly}
+                  examFeeToUse={exam}
+                  annualFeeToUse={annual}
+                  transportFeeToUse={transport}
+                  previousArrears={autoArrears + (structure?.Arrears ?? 0)} manualArrears={manualArrears}
                   selectedFees={selectedFees} />
               </div>
             );
