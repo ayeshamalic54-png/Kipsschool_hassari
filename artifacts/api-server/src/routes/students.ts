@@ -212,14 +212,19 @@ router.get("/:id/image", async (req, res) => {
 
     const img = student.imageUrl;
     if (img.startsWith("data:")) {
-      const matches = img.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-      if (matches) {
-        const contentType = matches[1];
-        const buffer = Buffer.from(matches[2], "base64");
-        res.set("Content-Type", contentType);
-        res.set("Cache-Control", "public, max-age=86400"); // Cache for 1 day
-        res.send(buffer);
-        return;
+      const parts = img.split(",");
+      if (parts.length >= 2) {
+        const matches = parts[0].match(/^data:([A-Za-z-+\/]+);base64$/i);
+        if (matches) {
+          const contentType = matches[1];
+          // Strip any whitespace/newlines that might cause decoding or matching issues
+          const base64Data = parts.slice(1).join(",").replace(/\s/g, "");
+          const buffer = Buffer.from(base64Data, "base64");
+          res.set("Content-Type", contentType);
+          res.set("Cache-Control", "public, max-age=86400"); // Cache for 1 day
+          res.send(buffer);
+          return;
+        }
       }
     }
 
