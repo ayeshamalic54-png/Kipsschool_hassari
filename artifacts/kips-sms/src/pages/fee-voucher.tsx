@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ReceiptText, Printer, Pencil, Check, GraduationCap,
   Save, Loader2, CheckCircle2, AlertTriangle, Trash2,
@@ -82,7 +83,7 @@ function authH(): HeadersInit {
 function VoucherCopy({
   copyLabel, student, selectedClassName, monthLabel, dueDate,
   voucherNo, structure, edit, fine, disc, total, monthlyFeeToUse,
-  previousArrears, manualArrears,
+  previousArrears, manualArrears, selectedFees,
 }: {
   copyLabel:        string;
   student:          { name: string; admissionNumber: string; fatherName?: string | null; section?: string | null };
@@ -98,16 +99,17 @@ function VoucherCopy({
   monthlyFeeToUse:  number;
   previousArrears:  number;
   manualArrears:    number;
+  selectedFees:     { monthly: boolean; exam: boolean; annual: boolean; transport: boolean; previous: boolean };
 }) {
   const printDate = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 
   // ALL fee components combined into one list — single voucher
   const feeRows: { label: string; amount: number; color?: string; prefix?: string }[] = [];
-  if (monthlyFeeToUse  > 0) feeRows.push({ label: "Monthly Tuition Fee",     amount: monthlyFeeToUse  });
-  if (structure?.examFee      && structure.examFee      > 0) feeRows.push({ label: "Exam / Test Fee",     amount: structure.examFee,      color: "#7c3aed" });
-  if (structure?.libraryFee   && structure.libraryFee   > 0) feeRows.push({ label: "Annual Charges",      amount: structure.libraryFee,   color: "#0369a1" });
-  if (structure?.transportFee && structure.transportFee > 0) feeRows.push({ label: "Transport Fee",       amount: structure.transportFee, color: "#0891b2" });
-  if (previousArrears > 0) feeRows.push({ label: "Previous Arrears (Auto)",  amount: previousArrears,  color: "#dc2626" });
+  if (selectedFees.monthly && monthlyFeeToUse  > 0) feeRows.push({ label: "Monthly Tuition Fee",     amount: monthlyFeeToUse  });
+  if (selectedFees.exam && structure?.examFee      && structure.examFee      > 0) feeRows.push({ label: "Exam / Test Fee",     amount: structure.examFee,      color: "#7c3aed" });
+  if (selectedFees.annual && structure?.libraryFee   && structure.libraryFee   > 0) feeRows.push({ label: "Annual Charges",      amount: structure.libraryFee,   color: "#0369a1" });
+  if (selectedFees.transport && structure?.transportFee && structure.transportFee > 0) feeRows.push({ label: "Transport Fee",       amount: structure.transportFee, color: "#0891b2" });
+  if (selectedFees.previous && previousArrears > 0) feeRows.push({ label: "Previous Arrears (Auto)",  amount: previousArrears,  color: "#dc2626" });
   if (manualArrears   > 0) feeRows.push({ label: "Additional Arrears",       amount: manualArrears,    color: "#b91c1c" });
   if (fine            > 0) feeRows.push({ label: "Late Fine",                amount: fine,             color: "#dc2626" });
   if (disc            > 0) feeRows.push({ label: edit.note || "Discount / Concession", amount: disc, color: "#059669", prefix: "−" });
@@ -210,6 +212,23 @@ export default function FeeVoucher() {
   const [allFeeRecords, setAllFeeRecords] = useState<FeeRecord[]>([]);
   const [saving,        setSaving]        = useState(false);
   const [saved,         setSaved]         = useState(false);
+  const [selectedFees,  setSelectedFees]  = useState({
+    monthly: true,
+    exam: true,
+    annual: true,
+    transport: true,
+    previous: true,
+  });
+
+  useEffect(() => {
+    setSelectedFees({
+      monthly: true,
+      exam: true,
+      annual: true,
+      transport: true,
+      previous: true,
+    });
+  }, [selectedClass]);
 
   // ── Duplicate warning state ────────────────────────────────────────────────
   // existingForMonth = fee records already saved for selected class + month
@@ -294,15 +313,16 @@ export default function FeeVoucher() {
 
   const calcTotal = (studentId: number, structure?: FeeStructure): number => {
     const e             = getEdit(studentId);
-    const monthly       = getMonthlyFee(studentId, structure);
-    const exam          = structure?.examFee      ?? 0;
-    const library       = structure?.libraryFee   ?? 0;
-    const transport     = structure?.transportFee ?? 0;
+    const monthly       = selectedFees.monthly ? getMonthlyFee(studentId, structure) : 0;
+    const exam          = selectedFees.exam ? (structure?.examFee ?? 0) : 0;
+    const library       = selectedFees.annual ? (structure?.libraryFee ?? 0) : 0;
+    const transport     = selectedFees.transport ? (structure?.transportFee ?? 0) : 0;
     const fine          = Number(e.fine     || 0);
     const disc          = Number(e.discount || 0);
-    const autoArrears   = getPreviousArrears(studentId);
+    const structArrears = selectedFees.previous ? (structure?.Arrears ?? 0) : 0;
+    const autoArrears   = selectedFees.previous ? getPreviousArrears(studentId) : 0;
     const manualArrears = Number(e.arrears  || 0);
-    return Math.max(0, monthly + exam + library + transport + fine + autoArrears + manualArrears - disc);
+    return Math.max(0, monthly + exam + library + transport + fine + structArrears + autoArrears + manualArrears - disc);
   };
 
   const makeVoucherNo = (admNo: string, idx: number) =>
@@ -367,13 +387,24 @@ export default function FeeVoucher() {
       const studentsPayload = classStudents.map(student => {
         const structure = student.classId ? feeStructureMap[student.classId] : undefined;
         const e         = getEdit(student.id);
+        const monthly   = selectedFees.monthly ? getMonthlyFee(student.id, structure) : 0;
+        const exam      = selectedFees.exam ? (structure?.examFee ?? 0) : 0;
+        const annual    = selectedFees.annual ? (structure?.libraryFee ?? 0) : 0;
+        const transport = selectedFees.transport ? (structure?.transportFee ?? 0) : 0;
+        const arrears   = selectedFees.previous ? (getPreviousArrears(student.id) + (structure?.Arrears ?? 0)) : 0;
+        const extraArrears = Number(e.arrears || 0);
+
         return {
-          studentId: student.id,
-          amount:    calcTotal(student.id, structure),
-          fine:      Number(e.fine     || 0),
-          discount:  Number(e.discount || 0),
-          arrears:   getPreviousArrears(student.id) + Number(e.arrears || 0),
-          note:      e.note || null,
+          studentId:    student.id,
+          amount:       calcTotal(student.id, structure),
+          fine:         Number(e.fine     || 0),
+          discount:     Number(e.discount || 0),
+          tuitionFee:   monthly,
+          examFee:      exam,
+          annualFee:    annual,
+          transportFee: transport,
+          arrears:      arrears + extraArrears,
+          note:         e.note || null,
         };
       });
 
@@ -437,18 +468,79 @@ export default function FeeVoucher() {
 
           {/* Fee structure quick-view */}
           {selectedClass && (
-            <div className={`p-3 rounded-lg border text-sm ${selectedStructure ? "bg-blue-50 border-blue-200" : "bg-amber-50 border-amber-300"}`}>
+            <div className={`p-4 rounded-xl border text-sm ${selectedStructure ? "bg-blue-50 border-blue-200" : "bg-amber-50 border-amber-300"}`}>
               {selectedStructure ? (
-                <div className="flex flex-wrap gap-x-6 gap-y-1">
-                  <span className="font-semibold text-blue-800">Fee Structure — {selectedClassName}:</span>
-                  {selectedStructure.monthlyFee   > 0 && <span className="text-gray-700">Monthly: <b>PKR {selectedStructure.monthlyFee.toLocaleString()}</b></span>}
-                  {selectedStructure.examFee      > 0 && <span className="text-gray-700">Exam: <b>PKR {selectedStructure.examFee.toLocaleString()}</b></span>}
-                  {selectedStructure.libraryFee   > 0 && <span className="text-gray-700">Annual: <b>PKR {selectedStructure.libraryFee.toLocaleString()}</b></span>}
-                  {selectedStructure.transportFee > 0 && <span className="text-gray-700">Transport: <b>PKR {selectedStructure.transportFee.toLocaleString()}</b></span>}
-                  {selectedStructure.Arrears      > 0 && <span className="text-red-600">Arrears: <b>PKR {selectedStructure.Arrears.toLocaleString()}</b></span>}
-                  <span className="font-bold text-emerald-700">
-                    Total/student: PKR {(selectedStructure.monthlyFee + selectedStructure.examFee + selectedStructure.libraryFee + selectedStructure.transportFee).toLocaleString()}
-                  </span>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-blue-900">Select Fees to Include for Vouchers:</span>
+                    <span className="text-xs text-blue-700 italic">Uncheck any fee you want to exclude from this batch of vouchers</span>
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-x-6 gap-y-3 items-center bg-white p-3 rounded-lg border border-blue-100">
+                    {selectedStructure.monthlyFee > 0 && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-gray-700 hover:text-gray-900 font-medium">
+                        <Checkbox 
+                          checked={selectedFees.monthly} 
+                          onCheckedChange={(checked) => setSelectedFees(prev => ({ ...prev, monthly: !!checked }))}
+                        />
+                        <span>Monthly Fee (PKR {selectedStructure.monthlyFee.toLocaleString()})</span>
+                      </label>
+                    )}
+                    
+                    {selectedStructure.examFee > 0 && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-gray-700 hover:text-gray-900 font-medium">
+                        <Checkbox 
+                          checked={selectedFees.exam} 
+                          onCheckedChange={(checked) => setSelectedFees(prev => ({ ...prev, exam: !!checked }))}
+                        />
+                        <span>Exam Fee (PKR {selectedStructure.examFee.toLocaleString()})</span>
+                      </label>
+                    )}
+                    
+                    {selectedStructure.libraryFee > 0 && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-gray-700 hover:text-gray-900 font-medium">
+                        <Checkbox 
+                          checked={selectedFees.annual} 
+                          onCheckedChange={(checked) => setSelectedFees(prev => ({ ...prev, annual: !!checked }))}
+                        />
+                        <span>Annual Fee (PKR {selectedStructure.libraryFee.toLocaleString()})</span>
+                      </label>
+                    )}
+                    
+                    {selectedStructure.transportFee > 0 && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-gray-700 hover:text-gray-900 font-medium">
+                        <Checkbox 
+                          checked={selectedFees.transport} 
+                          onCheckedChange={(checked) => setSelectedFees(prev => ({ ...prev, transport: !!checked }))}
+                        />
+                        <span>Transport Fee (PKR {selectedStructure.transportFee.toLocaleString()})</span>
+                      </label>
+                    )}
+
+                    {selectedStructure.Arrears > 0 && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none text-red-700 hover:text-red-900 font-medium">
+                        <Checkbox 
+                          checked={selectedFees.previous} 
+                          onCheckedChange={(checked) => setSelectedFees(prev => ({ ...prev, previous: !!checked }))}
+                        />
+                        <span>Previous Arrears (PKR {selectedStructure.Arrears.toLocaleString()})</span>
+                      </label>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm pt-1">
+                    <span className="font-semibold text-gray-600">Base Class Total: PKR {(selectedStructure.monthlyFee + selectedStructure.examFee + selectedStructure.libraryFee + selectedStructure.transportFee + selectedStructure.Arrears).toLocaleString()}</span>
+                    <span className="text-gray-300">|</span>
+                    <span className="font-bold text-emerald-700">
+                      Selected Total / Student: PKR {(
+                        (selectedFees.monthly ? selectedStructure.monthlyFee : 0) +
+                        (selectedFees.exam ? selectedStructure.examFee : 0) +
+                        (selectedFees.annual ? selectedStructure.libraryFee : 0) +
+                        (selectedFees.transport ? selectedStructure.transportFee : 0) +
+                        (selectedFees.previous ? selectedStructure.Arrears : 0)
+                      ).toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               ) : (
                 <p className="text-amber-700">No fee structure set for this class. Set it in the Fee Structure page first.</p>
@@ -667,13 +759,15 @@ export default function FeeVoucher() {
                     {/* Fee breakdown summary */}
                     <div className="text-right shrink-0 min-w-32">
                       <div className="space-y-0.5 text-xs text-gray-500">
-                        {monthly > 0 && (
+                        {selectedFees.monthly && monthly > 0 && (
                           <div>Monthly: PKR {monthly.toLocaleString()}{e.feeOverride ? " ✎" : ""}</div>
                         )}
-                        {structure?.examFee      && structure.examFee      > 0 && <div>Exam: PKR {structure.examFee.toLocaleString()}</div>}
-                        {structure?.libraryFee   && structure.libraryFee   > 0 && <div>Annual: PKR {structure.libraryFee.toLocaleString()}</div>}
-                        {structure?.transportFee && structure.transportFee > 0 && <div>Transport: PKR {structure.transportFee.toLocaleString()}</div>}
-                        {autoArrears   > 0 && <div className="text-red-600 font-medium">Arrears: PKR {autoArrears.toLocaleString()}</div>}
+                        {selectedFees.exam && structure?.examFee && structure.examFee > 0 && <div>Exam: PKR {structure.examFee.toLocaleString()}</div>}
+                        {selectedFees.annual && structure?.libraryFee && structure.libraryFee > 0 && <div>Annual: PKR {structure.libraryFee.toLocaleString()}</div>}
+                        {selectedFees.transport && structure?.transportFee && structure.transportFee > 0 && <div>Transport: PKR {structure.transportFee.toLocaleString()}</div>}
+                        {selectedFees.previous && (autoArrears > 0 || (structure?.Arrears ?? 0) > 0) && (
+                          <div className="text-red-600 font-medium">Arrears: PKR {(autoArrears + (structure?.Arrears ?? 0)).toLocaleString()}</div>
+                        )}
                         {manualArrears > 0 && <div className="text-red-700 font-medium">Extra Arrears: PKR {manualArrears.toLocaleString()} ✎</div>}
                         {fine > 0 && <div className="text-red-500">Fine: +PKR {fine.toLocaleString()}</div>}
                         {disc > 0 && <div className="text-emerald-600">Discount: −PKR {disc.toLocaleString()}</div>}
@@ -717,7 +811,8 @@ export default function FeeVoucher() {
                   student={student} selectedClassName={selectedClassName}
                   monthLabel={monthLabel} dueDate={dueDate} voucherNo={voucherNo}
                   structure={structure} edit={e} fine={fine} disc={disc} total={total}
-                  monthlyFeeToUse={monthly} previousArrears={autoArrears} manualArrears={manualArrears} />
+                  monthlyFeeToUse={monthly} previousArrears={autoArrears + (structure?.Arrears ?? 0)} manualArrears={manualArrears}
+                  selectedFees={selectedFees} />
 
                 <div className="cut-line" style={{ borderTop: "1.5px dashed #9ca3af", margin: "4mm 0", textAlign: "center", fontSize: "8pt", color: "#9ca3af" }}>
                   ✂ &nbsp; Cut Here &nbsp; ✂
@@ -727,7 +822,8 @@ export default function FeeVoucher() {
                   student={student} selectedClassName={selectedClassName}
                   monthLabel={monthLabel} dueDate={dueDate} voucherNo={voucherNo}
                   structure={structure} edit={e} fine={fine} disc={disc} total={total}
-                  monthlyFeeToUse={monthly} previousArrears={autoArrears} manualArrears={manualArrears} />
+                  monthlyFeeToUse={monthly} previousArrears={autoArrears + (structure?.Arrears ?? 0)} manualArrears={manualArrears}
+                  selectedFees={selectedFees} />
               </div>
             );
           })}

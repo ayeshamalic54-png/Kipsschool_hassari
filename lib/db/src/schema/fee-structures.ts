@@ -11,6 +11,7 @@ export const feeStructuresTable = pgTable("fee_structures", {
   examFee: numeric("exam_fee", { precision: 10, scale: 2 }).default("0"),
   libraryFee: numeric("library_fee", { precision: 10, scale: 2 }).default("0"),
   transportFee: numeric("transport_fee", { precision: 10, scale: 2 }).default("0"),
+  Arrears: numeric("Arrears", { precision: 10, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

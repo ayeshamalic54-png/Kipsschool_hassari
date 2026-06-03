@@ -14,6 +14,11 @@ export const feesTable = pgTable("fees", {
   fine: numeric("fine", { precision: 10, scale: 2 }).notNull().default("0"),
   discount: numeric("discount", { precision: 10, scale: 2 }).notNull().default("0"),
   notes: text("notes"),
+  tuitionFee: numeric("tuition_fee", { precision: 10, scale: 2 }).default("0"),
+  examFee: numeric("exam_fee", { precision: 10, scale: 2 }).default("0"),
+  annualFee: numeric("annual_fee", { precision: 10, scale: 2 }).default("0"),
+  transportFee: numeric("transport_fee", { precision: 10, scale: 2 }).default("0"),
+  arrears: numeric("arrears", { precision: 10, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 

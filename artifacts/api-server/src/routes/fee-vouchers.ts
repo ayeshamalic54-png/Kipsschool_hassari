@@ -32,12 +32,22 @@ async function enrichFee(fee: Record<string, unknown>) {
   const paidAmount = Number(fee.paidAmount ?? 0);
   const fine = Number(fee.fine ?? 0);
   const discount = Number(fee.discount ?? 0);
+  const tuitionFee = Number(fee.tuitionFee ?? 0);
+  const examFee = Number(fee.examFee ?? 0);
+  const annualFee = Number(fee.annualFee ?? 0);
+  const transportFee = Number(fee.transportFee ?? 0);
+  const arrears = Number(fee.arrears ?? 0);
   return {
     ...fee,
     amount,
     paidAmount,
     fine,
     discount,
+    tuitionFee,
+    examFee,
+    annualFee,
+    transportFee,
+    arrears,
     remainingAmount: Math.max(0, amount + fine - discount - paidAmount),
     studentName: student?.name ?? null,
     admissionNumber: student?.admissionNumber ?? null,
@@ -65,6 +75,10 @@ async function enrichFee(fee: Record<string, unknown>) {
  *       fine: number,
  *       discount: number,
  *       arrears: number,     // per-student arrears added to total
+ *       tuitionFee?: number,
+ *       examFee?: number,
+ *       annualFee?: number,
+ *       transportFee?: number,
  *       note: string
  *     }
  *   ]
@@ -88,6 +102,10 @@ router.post("/generate", requireAuth, async (req, res) => {
         fine?: number;
         discount?: number;
         arrears?: number;
+        tuitionFee?: number;
+        examFee?: number;
+        annualFee?: number;
+        transportFee?: number;
         note?: string;
       }>;
     };
@@ -132,6 +150,11 @@ router.post("/generate", requireAuth, async (req, res) => {
           paidAmount: "0",
           status:     "unpaid",
           notes:      s.note ?? null,
+          tuitionFee:   String(s.tuitionFee   ?? 0),
+          examFee:      String(s.examFee      ?? 0),
+          annualFee:    String(s.annualFee    ?? 0),
+          transportFee: String(s.transportFee ?? 0),
+          arrears:      String(s.arrears      ?? 0),
         } as never)
         .returning();
 
