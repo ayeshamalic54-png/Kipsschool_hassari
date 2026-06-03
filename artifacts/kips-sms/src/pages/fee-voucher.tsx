@@ -219,6 +219,7 @@ export default function FeeVoucher() {
   const [allFeeRecords, setAllFeeRecords] = useState<FeeRecord[]>([]);
   const [saving,        setSaving]        = useState(false);
   const [saved,         setSaved]         = useState(false);
+  const [deleting,      setDeleting]      = useState(false);
   const [selectedFees,  setSelectedFees]  = useState({
     monthly: true,
     exam: true,
@@ -409,6 +410,44 @@ export default function FeeVoucher() {
       setCheckingDuplicate(false);
     }
   }, [selectedClass, month]);
+
+  const handleDeleteExisting = async () => {
+    if (existingForMonth.length === 0) return;
+    setDeleting(true);
+    try {
+      await Promise.all(
+        existingForMonth.map(async (record) => {
+          const res = await fetch(`/api/fees/${record.id}`, {
+            method: "DELETE",
+            headers: authH(),
+          });
+          if (!res.ok) {
+            throw new Error(`Failed to delete record ID ${record.id}`);
+          }
+        })
+      );
+      
+      toast({ 
+        title: "Vouchers deleted", 
+        description: `Successfully removed ${existingForMonth.length} existing records for ${monthLabel}.` 
+      });
+      
+      setDuplicateDialogOpen(false);
+      setExistingForMonth([]);
+      setEdits({});
+      setSaved(false);
+      setGenerated(true);
+      loadFeeRecords();
+    } catch (err: unknown) {
+      toast({ 
+        variant: "destructive", 
+        title: "Delete failed", 
+        description: String((err as Error).message) 
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // ── Save to database ──────────────────────────────────────────────────────
   const handleSaveToDatabase = async () => {
@@ -669,10 +708,26 @@ export default function FeeVoucher() {
             </div>
           </div>
 
-          <div className="flex justify-end pt-2 border-t">
-            <Button onClick={() => setDuplicateDialogOpen(false)}
-              style={{ background: NAVY }} className="text-white">
-              Understood
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <Button variant="outline" onClick={() => setDuplicateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteExisting}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting Vouchers...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete &amp; Generate New
+                </>
+              )}
             </Button>
           </div>
         </DialogContent>
