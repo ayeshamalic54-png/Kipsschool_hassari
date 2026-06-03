@@ -18,7 +18,7 @@ const PRINT_STYLES = `
   @page { size: A4 portrait; margin: 6mm 8mm; }
   @media print {
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    .no-print { display: none !important; }
+    body > *:not(#kips-voucher-print) { display: none !important; }
     body { margin: 0; padding: 0; background: white; }
     #kips-voucher-print { display: block !important; }
     .voucher-pair { page-break-inside: avoid; page-break-after: always; }
