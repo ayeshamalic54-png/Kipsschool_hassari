@@ -18,8 +18,8 @@ function ensureUploadsDir() {
   if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => { ensureUploadsDir(); cb(null, UPLOADS_DIR); },
-  filename:    (_req, file, cb) => {
+  destination: (_req: any, _file: any, cb: any) => { ensureUploadsDir(); cb(null, UPLOADS_DIR); },
+  filename:    (_req: any, file: any, cb: any) => {
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `student-${Date.now()}${ext}`);
   },
@@ -27,22 +27,35 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
+  fileFilter: (_req: any, file: any, cb: any) => {
     const allowed = [".jpg", ".jpeg", ".png", ".webp"];
     if (allowed.includes(path.extname(file.originalname).toLowerCase())) cb(null, true);
-    else cb(new Error("Only jpg, jpeg, png, webp allowed"));
+    else cb(new Error("Only jpg, jpeg, png, webp allowed") as any);
   },
 });
 
-// ── Admission number: KPS-YEAR-001 sequential ────────────────────────────────
+// ── Admission number: KIPS-YEAR-XXXX sequential ────────────────────────────────
 async function generateAdmissionNumber(): Promise<string> {
   const year = new Date().getFullYear();
-  // Count all students (regardless of year) to get next sequential number
-  const [row] = await db
-    .select({ total: sql<number>`cast(count(*) as int)` })
+  const students = await db
+    .select({ admissionNumber: studentsTable.admissionNumber })
     .from(studentsTable);
-  const next = (Number(row?.total ?? 0) + 1);
-  return `KPS-${year}-${String(next).padStart(3, "0")}`;
+  
+  let maxNum = 3000;
+  const pattern = new RegExp(`^KIPS-${year}-(\\d+)$`, 'i');
+  for (const s of students) {
+    if (s.admissionNumber) {
+      const match = s.admissionNumber.match(pattern);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        // Only consider sequence numbers under 4000 to keep the 3000-based series sequential and tight
+        if (num > maxNum && num < 4000) {
+          maxNum = num;
+        }
+      }
+    }
+  }
+  return `KIPS-${year}-${maxNum + 1}`;
 }
 
 // GET /api/students
@@ -81,7 +94,11 @@ router.get("/", requireAuth, async (req, res) => {
     );
 
     const result = conditions.length > 0 ? await query.where(and(...conditions)) : await query;
-    res.json(result.map(r => ({ ...r, feeAmount: r.feeAmount ? Number(r.feeAmount) : null })));
+    res.json(result.map(r => ({
+      ...r,
+      feeAmount: r.feeAmount ? Number(r.feeAmount) : null,
+      imageUrl: r.imageUrl ? `/api/students/${r.id}/image` : null
+    })));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -93,10 +110,8 @@ router.post("/", requireAuth, async (req, res) => {
   try {
     const data = req.body;
     const admissionNumber = await generateAdmissionNumber();
-    // username: firstname.sequentialNum  e.g.  ali.001
-    const seqPart = admissionNumber.split("-").pop() ?? String(Date.now());
-    const firstName = (data.name as string).toLowerCase().replace(/\s+/g, ".").split(".")[0];
-    const username  = `${firstName}.${seqPart}`;
+    // username is exactly the admission number (e.g. KIPS-2026-3004)
+    const username = admissionNumber;
 
     const [student] = await db
       .insert(studentsTable)
@@ -117,7 +132,7 @@ router.post("/", requireAuth, async (req, res) => {
 });
 
 // POST /api/students/:id/image
-router.post("/:id/image", requireAuth, upload.single("image"), async (req, res) => {
+router.post("/:id/image", requireAuth, upload.single("image"), async (req: any, res) => {
   try {
     const reqUser = (req as AuthReq).user;
     if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
@@ -182,6 +197,49 @@ router.get("/uploads/:filename", (req, res) => {
   res.sendFile(filepath);
 });
 
+// GET /api/students/:id/image
+router.get("/:id/image", async (req, res) => {
+  try {
+    const [student] = await db
+      .select({ imageUrl: studentsTable.imageUrl })
+      .from(studentsTable)
+      .where(eq(studentsTable.id, Number(req.params.id)));
+
+    if (!student || !student.imageUrl) {
+      res.status(404).send("Not found");
+      return;
+    }
+
+    const img = student.imageUrl;
+    if (img.startsWith("data:")) {
+      const matches = img.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (matches) {
+        const contentType = matches[1];
+        const buffer = Buffer.from(matches[2], "base64");
+        res.set("Content-Type", contentType);
+        res.set("Cache-Control", "public, max-age=86400"); // Cache for 1 day
+        res.send(buffer);
+        return;
+      }
+    }
+
+    // Fallback: if it's a file path
+    if (img.startsWith("/api/students/uploads/")) {
+      const filename = img.split("/").pop();
+      const filepath = path.join(UPLOADS_DIR, filename!);
+      if (fs.existsSync(filepath)) {
+        res.sendFile(filepath);
+        return;
+      }
+    }
+
+    res.status(404).send("Not found");
+  } catch (err) {
+    req.log.error(err);
+    res.status(500).send("Internal server error");
+  }
+});
+
 // GET /api/students/:id
 router.get("/:id", requireAuth, async (req, res) => {
   try {
@@ -211,7 +269,11 @@ router.get("/:id", requireAuth, async (req, res) => {
     .where(eq(studentsTable.id, Number(req.params.id)));
 
     if (!student) { res.status(404).json({ error: "Student not found" }); return; }
-    res.json({ ...student, feeAmount: student.feeAmount ? Number(student.feeAmount) : null });
+    res.json({
+      ...student,
+      feeAmount: student.feeAmount ? Number(student.feeAmount) : null,
+      imageUrl: student.imageUrl ? `/api/students/${student.id}/image` : null
+    });
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
