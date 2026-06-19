@@ -128,9 +128,7 @@ router.get("/backups/:filename", requireAuth, async (req, res) => {
     if (!fs.existsSync(filepath) || !req.params.filename.endsWith(".json")) {
       res.status(404).json({ error: "Backup not found" }); return;
     }
-    res.setHeader("Content-Disposition", `attachment; filename="${req.params.filename}"`);
-    res.setHeader("Content-Type", "application/json");
-    res.send(fs.readFileSync(filepath));
+    res.download(filepath, req.params.filename);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Download failed" });

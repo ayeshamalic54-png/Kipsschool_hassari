@@ -21,12 +21,18 @@ export async function comparePassword(password: string, hash: string): Promise<b
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
+  let token = "";
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else if (req.query && typeof req.query.token === "string") {
+    token = req.query.token;
+  }
+
+  if (!token) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
-  const token = authHeader.slice(7);
   try {
     const decoded = verifyToken(token);
     (req as Request & { user: Record<string, unknown> }).user = decoded;

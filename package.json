@@ -19,6 +19,7 @@
     "typescript": "~5.9.3"
   },
   "dependencies": {
+    "jimp": "^1.6.1",
     "pg": "^8.20.0"
   }
 }

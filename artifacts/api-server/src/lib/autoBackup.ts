@@ -1,6 +1,7 @@
 import cron from "node-cron";
 import fs from "fs";
 import path from "path";
+import nodemailer from "nodemailer";
 import { db } from "@workspace/db";
 import {
   studentsTable, feesTable, attendanceTable, examsTable, examResultsTable,
@@ -10,6 +11,88 @@ import {
 import { logger } from "./logger";
 
 const BACKUP_DIR = path.resolve(process.cwd(), "../../backups");
+
+async function sendBackupEmail(filePath: string, filename: string) {
+  const host = process.env.BACKUP_EMAIL_HOST || "smtp.gmail.com";
+  const port = Number(process.env.BACKUP_EMAIL_PORT || "465");
+  const secure = process.env.BACKUP_EMAIL_SECURE !== "false";
+  const user = process.env.BACKUP_EMAIL_USER;
+  const pass = process.env.BACKUP_EMAIL_PASSWORD;
+  const recipient = process.env.BACKUP_EMAIL_RECIPIENT || "ayeshamalic54@gmail.com";
+
+  if (!user || !pass || pass === "your_gmail_app_password_here") {
+    logger.warn("SMTP credentials not configured or using placeholders. Skipping backup email sending.");
+    return;
+  }
+
+  let attachmentPath = filePath;
+  let isTempCreated = false;
+  const tempPath = filePath.replace(".json", "-email-stripped.json");
+
+  try {
+    const content = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(content);
+    if (parsed.data) {
+      if (Array.isArray(parsed.data.students)) {
+        parsed.data.students = parsed.data.students.map((s: any) => ({
+          ...s,
+          imageUrl: s.imageUrl && s.imageUrl.startsWith("data:") ? "[image_stripped]" : s.imageUrl
+        }));
+      }
+      if (Array.isArray(parsed.data.staff)) {
+        parsed.data.staff = parsed.data.staff.map((s: any) => ({
+          ...s,
+          imageUrl: s.imageUrl && s.imageUrl.startsWith("data:") ? "[image_stripped]" : s.imageUrl
+        }));
+      }
+      fs.writeFileSync(tempPath, JSON.stringify(parsed, null, 2));
+      attachmentPath = tempPath;
+      isTempCreated = true;
+      logger.info("Created stripped backup file for email attachment (removed large base64 student/staff photos)");
+    }
+  } catch (stripErr) {
+    logger.warn({ err: stripErr }, "Failed to strip images from backup for email. Sending original instead.");
+  }
+
+  try {
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
+      },
+    });
+
+    const mailOptions = {
+      from: `"Kips School Backup" <${user}>`,
+      to: recipient,
+      subject: `Daily Database Backup - ${new Date().toLocaleDateString("en-PK", { timeZone: "Asia/Karachi" })}`,
+      text: `Assalamu Alaikum,\n\nAttached is the automatic daily database backup file for Kips School Hassari, generated on ${new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}.\n\nNote: Large student/staff photo data has been stripped from this email attachment to comply with email size limits. The full backup file containing photos remains saved locally on the server.\n\nBest regards,\nSchool ERP System`,
+      attachments: [
+        {
+          filename: filename,
+          path: attachmentPath,
+        },
+      ],
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logger.info({ messageId: info.messageId }, "Backup email sent successfully");
+  } catch (emailErr) {
+    logger.error({ err: emailErr }, "Failed to send backup email");
+  } finally {
+    if (isTempCreated) {
+      try {
+        fs.unlinkSync(tempPath);
+      } catch (cleanupErr) {
+        logger.warn({ err: cleanupErr }, "Failed to delete temporary email backup file");
+      }
+    }
+  }
+}
+
 const MAX_AUTO_BACKUPS = 7;
 
 export const autoBackupState = {
@@ -51,8 +134,12 @@ async function runAutoBackup() {
     };
 
     const filename = `auto-backup-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
-    fs.writeFileSync(path.join(BACKUP_DIR, filename), JSON.stringify(backup, null, 2));
+    const filePath = path.join(BACKUP_DIR, filename);
+    fs.writeFileSync(filePath, JSON.stringify(backup, null, 2));
     logger.info({ filename, students: students.length }, "Auto daily backup saved");
+
+    // Email backup as attachment
+    await sendBackupEmail(filePath, filename);
 
     const autoFiles = fs.readdirSync(BACKUP_DIR)
       .filter(f => f.startsWith("auto-backup-"))

@@ -1,7 +1,9 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { db } from "@workspace/db";
+import { db, usersTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { startAutoBackupScheduler } from "./lib/autoBackup";
+import { hashPassword } from "./lib/auth";
 
 const rawPort = process.env["PORT"];
 
@@ -24,12 +26,35 @@ async function runMigrations() {
   }
 }
 
-runMigrations().then(() => {
-  app.listen(port, (err) => {
-    if (err) {
-      logger.error({ err }, "Error listening on port");
-      process.exit(1);
+// Seed default admin if DB is empty
+async function seedDefaultAdmin() {
+  try {
+    const existingUsers = await db.select().from(usersTable).limit(1);
+    if (existingUsers.length === 0) {
+      logger.info("No users found in database. Seeding default admin user...");
+      const hashedPassword = await hashPassword("@Munni0055@");
+      await db.insert(usersTable).values({
+        username: "admin",
+        password: hashedPassword,
+        role: "admin",
+        name: "Administrator",
+      });
+      logger.info("Default admin user seeded successfully (username: 'admin', password: '@Munni0055@')");
     }
-    logger.info({ port }, "Server listening");
+  } catch (err) {
+    logger.warn({ err }, "Failed to seed default admin (non-fatal)");
+  }
+}
+
+runMigrations().then(() => {
+  seedDefaultAdmin().then(() => {
+    app.listen(port, (err) => {
+      if (err) {
+        logger.error({ err }, "Error listening on port");
+        process.exit(1);
+      }
+      logger.info({ port }, "Server listening");
+      startAutoBackupScheduler();
+    });
   });
 });

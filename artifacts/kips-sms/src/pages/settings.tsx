@@ -208,16 +208,10 @@ export default function Settings() {
 
   useEffect(() => { loadCriteria(); loadBackups(); loadAutoStatus(); }, []);
 
-  const downloadBackup = async () => {
-    try {
-      const res = await apiFetch("/backup");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = `kips-backup-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click(); URL.revokeObjectURL(url);
-      toast({ title: "Backup downloaded" });
-    } catch (err) { toast({ variant: "destructive", title: "Download failed", description: String(err) }); }
+  const downloadBackup = () => {
+    const token = localStorage.getItem("kips_token") ?? localStorage.getItem("token") ?? "";
+    window.open(`/api/admin/backup?token=${encodeURIComponent(token)}`, "_blank");
+    toast({ title: "Starting backup download..." });
   };
 
   const saveToServer = async () => {
@@ -239,14 +233,10 @@ export default function Settings() {
     } catch (err) { toast({ variant: "destructive", title: "Delete failed", description: String(err) }); }
   };
 
-  const downloadSaved = async (filename: string) => {
-    try {
-      const res = await apiFetch(`/backups/${encodeURIComponent(filename)}`);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a"); a.href = url; a.download = filename;
-      a.click(); URL.revokeObjectURL(url);
-    } catch (err) { toast({ variant: "destructive", title: "Download failed", description: String(err) }); }
+  const downloadSaved = (filename: string) => {
+    const token = localStorage.getItem("kips_token") ?? localStorage.getItem("token") ?? "";
+    window.open(`/api/admin/backups/${encodeURIComponent(filename)}?token=${encodeURIComponent(token)}`, "_blank");
+    toast({ title: `Starting download of ${filename}...` });
   };
 
   const confirmRestore = (d: any, ts: string) => {
@@ -280,15 +270,10 @@ export default function Settings() {
   };
 
   const restoreFromServer = async (filename: string) => {
-    let backup: any;
-    try {
-      const res = await apiFetch(`/backups/${encodeURIComponent(filename)}`);
-      backup = await res.json(); if (!backup?.data) throw new Error();
-    } catch (err) { toast({ variant: "destructive", title: "Preview failed", description: String(err) }); return; }
-    if (!confirmRestore(backup.data, backup.timestamp ?? filename)) return;
+    if (!confirm(`Are you sure you want to restore the backup file: ${filename}?\nThis will overwrite your current database data.`)) return;
     setRestoring(true); setRestoreTarget(filename);
     try {
-      const res = await apiFetch("/restore", { method: "POST", body: JSON.stringify(backup) });
+      const res = await apiFetch(`/restore-from-server/${encodeURIComponent(filename)}`, { method: "POST" });
       showRestoreResult(await res.json());
     } catch (err) { toast({ variant: "destructive", title: "Restore failed", description: String(err) }); }
     finally { setRestoring(false); setRestoreTarget(""); }
