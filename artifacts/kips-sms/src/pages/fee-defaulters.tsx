@@ -37,7 +37,20 @@ const TDA: React.CSSProperties = { ...TD, background:"#fff7f7" };
 
 // ── WhatsApp message generator ────────────────────────────────────────────────
 function buildWhatsAppMsg(studentName: string, className: string, month: string, amount: number, dueDate: string, phone?: string | null): string {
-  const msg = `Assalam u Alaikum! 🌟\n\nKIPS School Hassari ki taraf se aapko yaad dilana chahte hain ke aapke bache *${studentName}* (Class: ${className}) ki *${month}* ki fee:\n\n💰 Amount: *PKR ${amount.toLocaleString()}*\n📅 Due Date: *${dueDate}*\n\nAbhi tak ada nahi hui. Meharbani farma kar jald az jald ada karein.\n\nShukriya! 🙏\nKIPS School Hassari`;
+  const msg = ````javascript
+`Assalam u Alaikum! 🌟
+
+KIPS School Hassari would like to remind you that the fee for your child *${studentName}* (Class: ${className}) for the month of *${month}* is:
+
+💰 Amount: *PKR ${amount.toLocaleString()}*
+📅 Due Date: *${dueDate}*
+
+It has not been paid yet. Kindly make the payment as soon as possible.
+
+Thank you! 🙏
+KIPS School Hassari`;
+```
+
   const encoded = encodeURIComponent(msg);
   const cleanPhone = (phone ?? "").replace(/\D/g, "");
   const intlPhone  = cleanPhone.startsWith("0") ? "92" + cleanPhone.slice(1) : cleanPhone.startsWith("92") ? cleanPhone : "92" + cleanPhone;
