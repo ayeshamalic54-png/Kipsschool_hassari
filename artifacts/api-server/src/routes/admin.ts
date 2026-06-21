@@ -181,19 +181,18 @@ async function truncateAndInsert(tableName: string, seqName: string, rows: Recor
 
 // ── Shared restore logic ───────────────────────────────────────────────────────
 async function performRestore(
-  backupData: Record<string, unknown[]>,
+  backupData: Record<string, any[]>,
   errors: string[]
 ) {
-  const { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes } = backupData as any;
+  const { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes } = backupData;
 
   // 1. Classes pehle insert karo (students inhe reference karte hain)
   if (classes?.length) {
-    for (const c of classes) {
-      try {
-        await db.insert(classesTable).values(sanitizeRow(c) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`class ${c.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
+    try {
+      const sanitized = classes.map(c => sanitizeRow(c));
+      await db.insert(classesTable).values(sanitized as any).onConflictDoNothing();
+    } catch (e: unknown) {
+      errors.push(`classes restore failed: ${e instanceof Error ? e.message : String(e)}`);
     }
     await db.execute(sql.raw(`SELECT setval('classes_id_seq', COALESCE((SELECT MAX(id) FROM "classes"), 0) + 1, false)`));
   }
@@ -208,139 +207,102 @@ async function performRestore(
     await db.execute(sql.raw(`DELETE FROM "salaries"`));
     await db.execute(sql.raw(`DELETE FROM "account_entries"`));
     await db.execute(sql.raw(`DELETE FROM "students"`));
+    await db.execute(sql.raw(`DELETE FROM "staff"`));
   } catch (e: unknown) {
     errors.push(`clear: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // 3. Students restore karo
-  if (students?.length) {
-    for (const s of students) {
+  // Helper to bulk insert in chunks of 200
+  const bulkInsert = async (table: any, rows: any[], name: string) => {
+    if (!rows || rows.length === 0) return;
+    const chunkSize = 200;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize).map(r => sanitizeRow(r));
       try {
-        await db.insert(studentsTable).values(sanitizeRow(s) as any).onConflictDoNothing();
+        await db.insert(table).values(chunk as any).onConflictDoNothing();
       } catch (e: unknown) {
-        errors.push(`student ${s.id} (${s.name}): ${e instanceof Error ? e.message : String(e)}`);
+        errors.push(`${name} chunk ${i}-${i + chunk.length} failed: ${e instanceof Error ? e.message : String(e)}`);
       }
     }
+  };
+
+  // Helper for heavy tables (students and staff) using smaller chunks
+  const heavyBulkInsert = async (table: any, rows: any[], name: string) => {
+    if (!rows || rows.length === 0) return;
+    const chunkSize = 10;
+    for (let i = 0; i < rows.length; i += chunkSize) {
+      const chunk = rows.slice(i, i + chunkSize).map(r => sanitizeRow(r));
+      try {
+        await db.insert(table).values(chunk as any).onConflictDoNothing();
+      } catch (e: unknown) {
+        errors.push(`${name} chunk ${i}-${i + chunk.length} failed: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+  };
+
+  // 3. Students restore karo
+  if (students?.length) {
+    await heavyBulkInsert(studentsTable, students, "students");
     await db.execute(sql.raw(`SELECT setval('students_id_seq', COALESCE((SELECT MAX(id) FROM "students"), 0) + 1, false)`));
   }
 
   // 4. Fees
   if (fees?.length) {
-    for (const f of fees) {
-      try {
-        await db.insert(feesTable).values(sanitizeRow(f) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`fee ${f.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(feesTable, fees, "fees");
     await db.execute(sql.raw(`SELECT setval('fees_id_seq', COALESCE((SELECT MAX(id) FROM "fees"), 0) + 1, false)`));
   }
 
   // 5. Attendance
   if (attendance?.length) {
-    for (const a of attendance) {
-      try {
-        await db.insert(attendanceTable).values(sanitizeRow(a) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`attendance ${a.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(attendanceTable, attendance, "attendance");
     await db.execute(sql.raw(`SELECT setval('attendance_id_seq', COALESCE((SELECT MAX(id) FROM "attendance"), 0) + 1, false)`));
   }
 
   // 6. Exams
   if (exams?.length) {
-    for (const e of exams) {
-      try {
-        await db.insert(examsTable).values(sanitizeRow(e) as any).onConflictDoNothing();
-      } catch (err: unknown) {
-        errors.push(`exam ${e.id}: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
+    await bulkInsert(examsTable, exams, "exams");
     await db.execute(sql.raw(`SELECT setval('exams_id_seq', COALESCE((SELECT MAX(id) FROM "exams"), 0) + 1, false)`));
   }
 
   // 7. Exam results
   if (examResults?.length) {
-    for (const r of examResults) {
-      try {
-        await db.insert(examResultsTable).values(sanitizeRow(r) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`examResult ${r.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(examResultsTable, examResults, "examResults");
     await db.execute(sql.raw(`SELECT setval('exam_results_id_seq', COALESCE((SELECT MAX(id) FROM "exam_results"), 0) + 1, false)`));
   }
 
-  // 8. FIX: Staff restore karo (pehle missing tha!)
+  // 8. Staff restore karo
   if (staff?.length) {
-    for (const s of staff) {
-      try {
-        await db.insert(staffTable).values(sanitizeRow(s) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`staff ${s.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await heavyBulkInsert(staffTable, staff, "staff");
     await db.execute(sql.raw(`SELECT setval('staff_id_seq', COALESCE((SELECT MAX(id) FROM "staff"), 0) + 1, false)`));
   }
 
   // 9. Salaries
   if (salaries?.length) {
-    for (const s of salaries) {
-      try {
-        await db.insert(salariesTable).values(sanitizeRow(s) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`salary ${s.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(salariesTable, salaries, "salaries");
     await db.execute(sql.raw(`SELECT setval('salaries_id_seq', COALESCE((SELECT MAX(id) FROM "salaries"), 0) + 1, false)`));
   }
 
   // 10. Account entries
   if (accountEntries?.length) {
-    for (const a of accountEntries) {
-      try {
-        await db.insert(accountEntriesTable).values(sanitizeRow(a) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`accountEntry ${a.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(accountEntriesTable, accountEntries, "accountEntries");
     await db.execute(sql.raw(`SELECT setval('account_entries_id_seq', COALESCE((SELECT MAX(id) FROM "account_entries"), 0) + 1, false)`));
   }
 
   // 11. Certificates
   if (certificates?.length) {
-    for (const c of certificates) {
-      try {
-        await db.insert(certificatesTable).values(sanitizeRow(c) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`certificate ${c.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(certificatesTable, certificates, "certificates");
     await db.execute(sql.raw(`SELECT setval('certificates_id_seq', COALESCE((SELECT MAX(id) FROM "certificates"), 0) + 1, false)`));
   }
 
   // 12. Fee Structures
   if (backupData.feeStructures?.length) {
-    for (const f of backupData.feeStructures) {
-      try {
-        await db.insert(feeStructuresTable).values(sanitizeRow(f) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`feeStructure ${f.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(feeStructuresTable, backupData.feeStructures, "feeStructures");
     await db.execute(sql.raw(`SELECT setval('fee_structures_id_seq', COALESCE((SELECT MAX(id) FROM "fee_structures"), 0) + 1, false)`));
   }
 
   // 13. Settings
   if (backupData.settings?.length) {
-    for (const s of backupData.settings) {
-      try {
-        await db.insert(settingsTable).values(sanitizeRow(s) as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`settings ${s.id}: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    }
+    await bulkInsert(settingsTable, backupData.settings, "settings");
   }
 }
 
