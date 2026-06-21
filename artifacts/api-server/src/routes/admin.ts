@@ -26,6 +26,10 @@ async function compressImageIfBase64(imageUrl: string): Promise<string> {
   if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('data:image')) {
     return imageUrl;
   }
+  // Optimization: If the base64 string is already small (< 200KB characters), don't compress it
+  if (imageUrl.length < 200000) {
+    return imageUrl;
+  }
   try {
     const matches = imageUrl.match(/^data:image\/([a-zA-Z+]+);base64,(.+)$/);
     if (!matches) return imageUrl;
@@ -222,18 +226,7 @@ async function performRestore(
 ) {
   const { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes } = backupData;
 
-  // 1. Classes pehle insert karo (students inhe reference karte hain)
-  if (classes?.length) {
-    try {
-      const sanitized = classes.map(c => sanitizeRow(c));
-      await db.insert(classesTable).values(sanitized as any).onConflictDoNothing();
-    } catch (e: unknown) {
-      errors.push(`classes restore failed: ${e instanceof Error ? e.message : String(e)}`);
-    }
-    await db.execute(sql.raw(`SELECT setval('classes_id_seq', COALESCE((SELECT MAX(id) FROM "classes"), 0) + 1, false)`));
-  }
-
-  // 2. Dependent tables delete karo (order important hai — FK constraints)
+  // 1. Dependent tables delete karo (order important hai — FK constraints)
   try {
     await db.execute(sql.raw(`DELETE FROM "exam_results"`));
     await db.execute(sql.raw(`DELETE FROM "exams"`));
@@ -244,6 +237,9 @@ async function performRestore(
     await db.execute(sql.raw(`DELETE FROM "account_entries"`));
     await db.execute(sql.raw(`DELETE FROM "students"`));
     await db.execute(sql.raw(`DELETE FROM "staff"`));
+    await db.execute(sql.raw(`DELETE FROM "classes"`));
+    try { await db.execute(sql.raw(`DELETE FROM "fee_structures"`)); } catch {}
+    try { await db.execute(sql.raw(`DELETE FROM "settings"`)); } catch {}
   } catch (e: unknown) {
     errors.push(`clear: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -251,7 +247,7 @@ async function performRestore(
   // Helper to bulk insert with fail-safe row-by-row fallback and image compression
   const bulkInsert = async (table: any, rows: any[], name: string, isHeavy: boolean = false) => {
     if (!rows || rows.length === 0) return;
-    const chunkSize = isHeavy ? 10 : 100;
+    const chunkSize = isHeavy ? 10 : 1000;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
       
@@ -281,6 +277,17 @@ async function performRestore(
       }
     }
   };
+
+  // 2. Classes restore karo (students/exams reference them)
+  if (classes?.length) {
+    try {
+      const sanitized = classes.map(c => sanitizeRow(c));
+      await db.insert(classesTable).values(sanitized as any).onConflictDoNothing();
+    } catch (e: unknown) {
+      errors.push(`classes restore failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    await db.execute(sql.raw(`SELECT setval('classes_id_seq', COALESCE((SELECT MAX(id) FROM "classes"), 0) + 1, false)`));
+  }
 
   // 3. Students restore karo
   if (students?.length) {
