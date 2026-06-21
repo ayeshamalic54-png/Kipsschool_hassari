@@ -244,23 +244,12 @@ async function performRestore(
     errors.push(`clear: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Helper to bulk insert with fail-safe row-by-row fallback and image compression
+  // Helper to bulk insert with fail-safe row-by-row fallback (no image compression to avoid CPU blocks)
   const bulkInsert = async (table: any, rows: any[], name: string, isHeavy: boolean = false) => {
     if (!rows || rows.length === 0) return;
-    const chunkSize = isHeavy ? 10 : 1000;
+    const chunkSize = isHeavy ? 5 : 1000;
     for (let i = 0; i < rows.length; i += chunkSize) {
       const chunk = rows.slice(i, i + chunkSize);
-      
-      // Compress images on-the-fly for students and staff
-      if (isHeavy) {
-        for (const r of chunk) {
-          const imgKey = ('image_url' in r) ? 'image_url' : (('imageUrl' in r) ? 'imageUrl' : null);
-          if (imgKey && r[imgKey] && typeof r[imgKey] === 'string' && r[imgKey].startsWith('data:image')) {
-            r[imgKey] = await compressImageIfBase64(r[imgKey]);
-          }
-        }
-      }
-
       const sanitizedChunk = chunk.map(r => sanitizeRow(r));
       try {
         await db.insert(table).values(sanitizedChunk as any).onConflictDoNothing();
