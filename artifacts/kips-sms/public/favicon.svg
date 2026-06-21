@@ -1,3 +1,25 @@
 <svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+  <defs>
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#B91C1C"/>
+    </linearGradient>
+  </defs>
+  <!-- Beautiful Rounded Red Square -->
+  <rect width="180" height="180" rx="42" fill="url(#redGrad)"/>
+  
+  <!-- Inner circular glow/frame -->
+  <circle cx="90" cy="90" r="65" stroke="white" stroke-width="4" stroke-opacity="0.25"/>
+
+  <!-- School/Education Icon: Graduation Cap & Book in White/Gold -->
+  <g transform="translate(45, 45) scale(1.125)">
+    <!-- Graduation Cap (Mortarboard) -->
+    <path d="M40 8L4 24L40 40L76 24L40 8Z" fill="white"/>
+    <path d="M16 32V50C16 56 26 62 40 62C54 62 64 56 64 50V32L40 43L16 32Z" fill="#F3F4F6"/>
+    <!-- Gold Tassel -->
+    <path d="M64 26V46L68 50L72 46V26H64Z" fill="#FBBF24"/>
+    
+    <!-- Open Book at the bottom -->
+    <path d="M12 52C24 48 38 52 40 54C42 52 56 48 68 52V68C56 64 42 67 40 69C38 67 24 64 12 68V52Z" fill="white" stroke="#B91C1C" stroke-width="2"/>
+  </g>
 </svg>

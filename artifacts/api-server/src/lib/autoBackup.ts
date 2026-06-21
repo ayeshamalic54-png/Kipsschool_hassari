@@ -99,7 +99,7 @@ export const autoBackupState = {
   lastRun: null as string | null,
   lastStatus: "never" as "never" | "success" | "error",
   lastError: null as string | null,
-  nextRun: "Every day at midnight (00:00)",
+  nextRun: "Daily at 10:00 AM and 3:00 PM (PKT)",
   enabled: true,
 };
 
@@ -164,8 +164,13 @@ async function runAutoBackup() {
 }
 
 export function startAutoBackupScheduler() {
-  cron.schedule("0 0 * * *", runAutoBackup, { timezone: "Asia/Karachi" });
-  logger.info("Auto daily backup scheduler started (runs at midnight PKT)");
+  // Run at 10:00 AM Pakistan Time (PKT)
+  cron.schedule("0 10 * * *", runAutoBackup, { timezone: "Asia/Karachi" });
+  
+  // Run at 3:00 PM Pakistan Time (PKT)
+  cron.schedule("0 15 * * *", runAutoBackup, { timezone: "Asia/Karachi" });
+  
+  logger.info("Auto daily backup scheduler started (runs at 10:00 AM and 3:00 PM PKT)");
 }
 
 export { runAutoBackup };
