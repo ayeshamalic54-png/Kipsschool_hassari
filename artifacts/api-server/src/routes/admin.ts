@@ -11,6 +11,7 @@ import type { Request } from "express";
 import fs from "fs";
 import path from "path";
 import { autoBackupState, runAutoBackup } from "../lib/autoBackup";
+import { logger } from "../lib/logger";
 
 type AuthReq = Request & { user: Record<string, unknown> };
 
@@ -19,6 +20,41 @@ const BACKUP_DIR = path.resolve(process.cwd(), "../../backups");
 
 function ensureBackupDir() {
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+}
+
+async function compressImageIfBase64(imageUrl: string): Promise<string> {
+  if (!imageUrl || typeof imageUrl !== 'string' || !imageUrl.startsWith('data:image')) {
+    return imageUrl;
+  }
+  try {
+    const matches = imageUrl.match(/^data:image\/([a-zA-Z+]+);base64,(.+)$/);
+    if (!matches) return imageUrl;
+    
+    const base64Data = matches[2];
+    const buffer = Buffer.from(base64Data, 'base64');
+    
+    const { Jimp } = await import("jimp");
+    const image = await Jimp.read(buffer);
+    
+    let w = image.width;
+    let h = image.height;
+    const maxDim = 350;
+    if (w > maxDim || h > maxDim) {
+      if (w > h) {
+        h = Math.round((h * maxDim) / w);
+        w = maxDim;
+      } else {
+        w = Math.round((w * maxDim) / h);
+        h = maxDim;
+      }
+      image.resize({ w, h });
+    }
+    
+    const jpegBuffer = await image.getBuffer("image/jpeg");
+    return `data:image/jpeg;base64,${jpegBuffer.toString('base64')}`;
+  } catch (err: any) {
+    return imageUrl;
+  }
 }
 
 // FIX: createdAt/updatedAt strip mat karo — Date string ko proper Date object mein convert karo
@@ -212,37 +248,43 @@ async function performRestore(
     errors.push(`clear: ${e instanceof Error ? e.message : String(e)}`);
   }
 
-  // Helper to bulk insert in chunks of 200
-  const bulkInsert = async (table: any, rows: any[], name: string) => {
+  // Helper to bulk insert with fail-safe row-by-row fallback and image compression
+  const bulkInsert = async (table: any, rows: any[], name: string, isHeavy: boolean = false) => {
     if (!rows || rows.length === 0) return;
-    const chunkSize = 200;
+    const chunkSize = isHeavy ? 10 : 100;
     for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize).map(r => sanitizeRow(r));
-      try {
-        await db.insert(table).values(chunk as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`${name} chunk ${i}-${i + chunk.length} failed: ${e instanceof Error ? e.message : String(e)}`);
+      const chunk = rows.slice(i, i + chunkSize);
+      
+      // Compress images on-the-fly for students and staff
+      if (isHeavy) {
+        for (const r of chunk) {
+          const imgKey = ('image_url' in r) ? 'image_url' : (('imageUrl' in r) ? 'imageUrl' : null);
+          if (imgKey && r[imgKey] && typeof r[imgKey] === 'string' && r[imgKey].startsWith('data:image')) {
+            r[imgKey] = await compressImageIfBase64(r[imgKey]);
+          }
+        }
       }
-    }
-  };
 
-  // Helper for heavy tables (students and staff) using smaller chunks
-  const heavyBulkInsert = async (table: any, rows: any[], name: string) => {
-    if (!rows || rows.length === 0) return;
-    const chunkSize = 10;
-    for (let i = 0; i < rows.length; i += chunkSize) {
-      const chunk = rows.slice(i, i + chunkSize).map(r => sanitizeRow(r));
+      const sanitizedChunk = chunk.map(r => sanitizeRow(r));
       try {
-        await db.insert(table).values(chunk as any).onConflictDoNothing();
-      } catch (e: unknown) {
-        errors.push(`${name} chunk ${i}-${i + chunk.length} failed: ${e instanceof Error ? e.message : String(e)}`);
+        await db.insert(table).values(sanitizedChunk as any).onConflictDoNothing();
+      } catch (bulkErr: any) {
+        logger.warn(`Bulk insert failed for ${name} chunk ${i}-${i + chunk.length}, falling back to row-by-row. Error: ${bulkErr.message}`);
+        for (let j = 0; j < chunk.length; j++) {
+          const r = chunk[j];
+          try {
+            await db.insert(table).values(sanitizeRow(r) as any).onConflictDoNothing();
+          } catch (rowErr: any) {
+            errors.push(`${name} row index ${i+j} failed: ${rowErr.message}`);
+          }
+        }
       }
     }
   };
 
   // 3. Students restore karo
   if (students?.length) {
-    await heavyBulkInsert(studentsTable, students, "students");
+    await bulkInsert(studentsTable, students, "students", true);
     await db.execute(sql.raw(`SELECT setval('students_id_seq', COALESCE((SELECT MAX(id) FROM "students"), 0) + 1, false)`));
   }
 
@@ -272,7 +314,7 @@ async function performRestore(
 
   // 8. Staff restore karo
   if (staff?.length) {
-    await heavyBulkInsert(staffTable, staff, "staff");
+    await bulkInsert(staffTable, staff, "staff", true);
     await db.execute(sql.raw(`SELECT setval('staff_id_seq', COALESCE((SELECT MAX(id) FROM "staff"), 0) + 1, false)`));
   }
 
