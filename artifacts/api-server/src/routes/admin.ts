@@ -445,7 +445,7 @@ router.post("/auto-backup/run-now", requireAuth, async (req, res) => {
 // GET /api/admin/auto-backup/trigger
 router.get("/auto-backup/trigger", async (req, res) => {
   const triggerKey = req.query.key;
-  const expectedKey = process.env.AUTO_BACKUP_TRIGGER_KEY || "kips_backup_key_2026";
+  const expectedKey = process.env.AUTO_BACKUP_TRIGGER_KEY || "Lb6627pOzvpNud6bBXq/eFYL8LRfLRQFNMF1Py2LKec=";
   if (!triggerKey || triggerKey !== expectedKey) {
     res.status(403).json({ error: "Invalid trigger key" });
     return;
