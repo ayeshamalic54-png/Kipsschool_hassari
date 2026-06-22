@@ -413,7 +413,18 @@ router.get("/auto-backup/status", requireAuth, async (req, res) => {
     const autoFiles = fs.existsSync(BACKUP_DIR)
       ? fs.readdirSync(BACKUP_DIR).filter(f => f.startsWith("auto-backup-")).sort().reverse()
       : [];
-    res.json({ ...autoBackupState, autoBackupCount: autoFiles.length, autoBackupFiles: autoFiles.slice(0, 7) });
+    res.json({
+      ...autoBackupState,
+      emailConfig: {
+        host: process.env.BACKUP_EMAIL_HOST || "default: smtp.gmail.com",
+        port: process.env.BACKUP_EMAIL_PORT || "default: 465",
+        user: process.env.BACKUP_EMAIL_USER ? "configured" : "missing",
+        pass: process.env.BACKUP_EMAIL_PASSWORD ? "configured" : "missing",
+        recipient: process.env.BACKUP_EMAIL_RECIPIENT || "default: ayeshamalic54@gmail.com",
+      },
+      autoBackupCount: autoFiles.length,
+      autoBackupFiles: autoFiles.slice(0, 7)
+    });
   } catch (err) {
     res.status(500).json({ error: "Status check failed" });
   }

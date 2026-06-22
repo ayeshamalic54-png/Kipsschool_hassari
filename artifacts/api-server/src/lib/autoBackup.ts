@@ -80,8 +80,10 @@ async function sendBackupEmail(filePath: string, filename: string) {
 
     const info = await transporter.sendMail(mailOptions);
     logger.info({ messageId: info.messageId }, "Backup email sent successfully");
-  } catch (emailErr) {
+    autoBackupState.lastEmailStatus = "sent_successfully";
+  } catch (emailErr: any) {
     logger.error({ err: emailErr }, "Failed to send backup email");
+    autoBackupState.lastEmailStatus = `error: ${emailErr.message || String(emailErr)}`;
   } finally {
     if (isTempCreated) {
       try {
@@ -99,6 +101,7 @@ export const autoBackupState = {
   lastRun: null as string | null,
   lastStatus: "never" as "never" | "success" | "error",
   lastError: null as string | null,
+  lastEmailStatus: "never" as string,
   nextRun: "Daily at 10:00 AM and 3:00 PM (PKT)",
   enabled: true,
 };
