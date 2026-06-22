@@ -113,13 +113,47 @@ function ensureBackupDir() {
 async function runAutoBackup() {
   try {
     ensureBackupDir();
-    const [students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings] = await Promise.all([
-      db.select().from(studentsTable),
+    const [rawStudents, fees, attendance, exams, examResults, rawStaff, salaries, accountEntries, certificates, classes, users, feeStructures, settings] = await Promise.all([
+      db.select({
+        id: studentsTable.id,
+        admissionNumber: studentsTable.admissionNumber,
+        name: studentsTable.name,
+        fatherName: studentsTable.fatherName,
+        motherName: studentsTable.motherName,
+        dateOfBirth: studentsTable.dateOfBirth,
+        gender: studentsTable.gender,
+        address: studentsTable.address,
+        phone: studentsTable.phone,
+        emergencyContact: studentsTable.emergencyContact,
+        classId: studentsTable.classId,
+        section: studentsTable.section,
+        rollNumber: studentsTable.rollNumber,
+        feeAmount: studentsTable.feeAmount,
+        siblingDiscount: studentsTable.siblingDiscount,
+        status: studentsTable.status,
+        username: studentsTable.username,
+        createdAt: studentsTable.createdAt,
+        updatedAt: studentsTable.updatedAt,
+      }).from(studentsTable),
       db.select().from(feesTable),
       db.select().from(attendanceTable),
       db.select().from(examsTable),
       db.select().from(examResultsTable),
-      db.select().from(staffTable),
+      db.select({
+        id: staffTable.id,
+        name: staffTable.name,
+        role: staffTable.role,
+        phone: staffTable.phone,
+        email: staffTable.email,
+        address: staffTable.address,
+        subject: staffTable.subject,
+        salary: staffTable.salary,
+        joinDate: staffTable.joinDate,
+        status: staffTable.status,
+        username: staffTable.username,
+        createdAt: staffTable.createdAt,
+        updatedAt: staffTable.updatedAt,
+      }).from(staffTable),
       db.select().from(salariesTable),
       db.select().from(accountEntriesTable),
       db.select().from(certificatesTable),
@@ -128,6 +162,9 @@ async function runAutoBackup() {
       db.select().from(feeStructuresTable),
       db.select().from(settingsTable),
     ]);
+
+    const students = rawStudents.map(s => ({ ...s, imageUrl: null }));
+    const staff = rawStaff.map(s => ({ ...s, imageUrl: null }));
 
     const backup = {
       version: "1.0",
