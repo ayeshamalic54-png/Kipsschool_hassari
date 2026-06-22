@@ -431,6 +431,22 @@ router.post("/auto-backup/run-now", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/admin/auto-backup/trigger
+router.get("/auto-backup/trigger", async (req, res) => {
+  const triggerKey = req.query.key;
+  const expectedKey = process.env.AUTO_BACKUP_TRIGGER_KEY || "kips_backup_key_2026";
+  if (!triggerKey || triggerKey !== expectedKey) {
+    res.status(403).json({ error: "Invalid trigger key" });
+    return;
+  }
+  try {
+    await runAutoBackup();
+    res.json({ message: "Backup triggered successfully", state: autoBackupState });
+  } catch (err) {
+    res.status(500).json({ error: "Backup trigger failed" });
+  }
+});
+
 // POST /api/admin/sync-student-users
 router.post("/sync-student-users", requireAuth, async (req, res) => {
   const reqUser = (req as AuthReq).user;
