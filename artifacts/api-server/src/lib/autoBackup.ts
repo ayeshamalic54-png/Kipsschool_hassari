@@ -16,8 +16,8 @@ async function sendBackupEmail(filePath: string, filename: string) {
   const host = process.env.BACKUP_EMAIL_HOST || "smtp.gmail.com";
   const port = Number(process.env.BACKUP_EMAIL_PORT || "465");
   const secure = process.env.BACKUP_EMAIL_SECURE !== "false";
-  const user = process.env.BACKUP_EMAIL_USER;
-  const pass = process.env.BACKUP_EMAIL_PASSWORD;
+  const user = process.env.BACKUP_EMAIL_USER || "ayeshamalic54@gmail.com";
+  const pass = process.env.BACKUP_EMAIL_PASSWORD || "gxsxpbqetudobrmm";
   const recipient = process.env.BACKUP_EMAIL_RECIPIENT || "ayeshamalic54@gmail.com";
 
   if (!user || !pass || pass === "your_gmail_app_password_here") {
