@@ -164,11 +164,12 @@ router.get("/backups/:filename", requireAuth, async (req, res) => {
   const reqUser = (req as AuthReq).user;
   if (reqUser.role !== "admin") { res.status(403).json({ error: "Admin only" }); return; }
   try {
-    const filepath = path.join(BACKUP_DIR, req.params.filename);
-    if (!fs.existsSync(filepath) || !req.params.filename.endsWith(".json")) {
+    const filename = req.params.filename as string;
+    const filepath = path.join(BACKUP_DIR, filename);
+    if (!fs.existsSync(filepath) || !filename.endsWith(".json")) {
       res.status(404).json({ error: "Backup not found" }); return;
     }
-    res.download(filepath, req.params.filename);
+    res.download(filepath, filename);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Download failed" });
@@ -180,7 +181,7 @@ router.delete("/backups/:filename", requireAuth, async (req, res) => {
   const reqUser = (req as AuthReq).user;
   if (reqUser.role !== "admin") { res.status(403).json({ error: "Admin only" }); return; }
   try {
-    const filepath = path.join(BACKUP_DIR, req.params.filename);
+    const filepath = path.join(BACKUP_DIR, req.params.filename as string);
     if (!fs.existsSync(filepath)) { res.status(404).json({ error: "Not found" }); return; }
     fs.unlinkSync(filepath);
     res.json({ message: "Deleted" });
@@ -381,8 +382,9 @@ router.post("/restore-from-server/:filename", requireAuth, async (req, res) => {
   const reqUser = (req as AuthReq).user;
   if (reqUser.role !== "admin") { res.status(403).json({ error: "Admin only" }); return; }
   try {
-    const filepath = path.join(BACKUP_DIR, req.params.filename);
-    if (!fs.existsSync(filepath) || !req.params.filename.endsWith(".json")) {
+    const filename = req.params.filename as string;
+    const filepath = path.join(BACKUP_DIR, filename);
+    if (!fs.existsSync(filepath) || !filename.endsWith(".json")) {
       res.status(400).json({ error: "Backup not found" }); return;
     }
     const backup = JSON.parse(fs.readFileSync(filepath, "utf-8"));

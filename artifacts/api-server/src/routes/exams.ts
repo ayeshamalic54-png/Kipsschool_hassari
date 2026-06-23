@@ -202,7 +202,7 @@ router.post("/:id/results", requireAuth, async (req, res) => {
     if (existing) {
       [result] = await db
         .update(examResultsTable)
-        .set({ marksObtained: marks, grade: finalGrade, remarks: remarks ?? null })
+        .set({ marksObtained: String(marks), grade: finalGrade, remarks: remarks ?? null })
         .where(eq(examResultsTable.id, existing.id))
         .returning();
     } else {
@@ -211,7 +211,7 @@ router.post("/:id/results", requireAuth, async (req, res) => {
         .values({
           examId,
           studentId:     Number(studentId),
-          marksObtained: marks,
+          marksObtained: String(marks),
           grade:         finalGrade,
           remarks:       remarks ?? null,
         })
@@ -273,7 +273,7 @@ router.post("/:id/results/bulk", requireAuth, async (req, res) => {
       if (existing) {
         await db
           .update(examResultsTable)
-          .set({ marksObtained: marks, grade, remarks: entry.remarks ?? null })
+          .set({ marksObtained: String(marks), grade, remarks: entry.remarks ?? null })
           .where(eq(examResultsTable.id, existing.id));
       } else {
         await db
@@ -281,7 +281,7 @@ router.post("/:id/results/bulk", requireAuth, async (req, res) => {
           .values({
             examId,
             studentId:     Number(entry.studentId),
-            marksObtained: marks,
+            marksObtained: String(marks),
             grade,
             remarks:       entry.remarks ?? null,
           });
