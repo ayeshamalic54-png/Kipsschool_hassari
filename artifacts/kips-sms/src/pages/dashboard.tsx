@@ -17,6 +17,11 @@ const fmt = (v: number | undefined, isCurrency?: boolean) => {
   return isCurrency ? `PKR ${v.toLocaleString()}` : v.toLocaleString();
 };
 
+const getCleanMonth = (m: string) => {
+  const match = m.match(/\d{4}-\d{2}/);
+  return match ? match[0] : m;
+};
+
 // ── Student Dashboard ────────────────────────────────────────────────────────
 function StudentDashboard({ name }: { name: string }) {
   const { data: fees,       isLoading: feesLoading } = useListFees({});
@@ -24,7 +29,21 @@ function StudentDashboard({ name }: { name: string }) {
 
   const today = new Date().toLocaleDateString("en-PK", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-  const paidFees    = (fees ?? []).filter(f => f.status === "paid");
+  // Calculate unique months and categorize them
+  const uniqueMonths = Array.from(new Set((fees ?? []).map(f => getCleanMonth(f.month))));
+  let paidMonthsCount = 0;
+  let pendingMonthsCount = 0;
+
+  uniqueMonths.forEach(m => {
+    const monthFees = (fees ?? []).filter(f => getCleanMonth(f.month) === m);
+    const allPaid = monthFees.every(f => f.status === "paid");
+    if (allPaid) {
+      paidMonthsCount++;
+    } else {
+      pendingMonthsCount++;
+    }
+  });
+
   const unpaidFees  = (fees ?? []).filter(f => f.status === "unpaid");
   const partialFees = (fees ?? []).filter(f => f.status === "partial");
   const totalDue    = [...unpaidFees, ...partialFees].reduce((s, f) => s + (f.remainingAmount ?? 0), 0);
@@ -53,9 +72,9 @@ function StudentDashboard({ name }: { name: string }) {
         </h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Total Fees",  value: fees?.length ?? 0,                     icon: FileText,      gradient: "from-blue-500 to-cyan-500",       isCurrency: false, suffix: " months" },
-            { label: "Paid",        value: paidFees.length,                        icon: CheckCircle,   gradient: "from-emerald-500 to-green-500",   isCurrency: false, suffix: " months" },
-            { label: "Pending",     value: unpaidFees.length + partialFees.length, icon: XCircle,       gradient: "from-red-500 to-rose-600",         isCurrency: false, suffix: " months" },
+            { label: "Total Fees",  value: uniqueMonths.length,                   icon: FileText,      gradient: "from-blue-500 to-cyan-500",       isCurrency: false, suffix: " Months" },
+            { label: "Paid",        value: paidMonthsCount,                        icon: CheckCircle,   gradient: "from-emerald-500 to-green-500",   isCurrency: false, suffix: " Months" },
+            { label: "Pending",     value: pendingMonthsCount,                     icon: XCircle,       gradient: "from-red-500 to-rose-600",         isCurrency: false, suffix: " Months" },
             { label: "Amount Due",  value: totalDue,                               icon: AlertTriangle, gradient: "from-orange-500 to-amber-500",     isCurrency: true,  suffix: "" },
           ].map(card => (
             <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
@@ -103,7 +122,7 @@ function StudentDashboard({ name }: { name: string }) {
                         <p className="text-white/80 text-xs font-medium uppercase tracking-wide">{card.label}</p>
                         {attLoading
                           ? <Skeleton className="h-6 w-16 mt-1 bg-white/30" />
-                          : <p className="text-white text-2xl font-bold mt-1">{card.value} days</p>
+                          : <p className="text-white text-2xl font-bold mt-1">{card.value} Days</p>
                         }
                       </div>
                       <div className="bg-white/20 rounded-xl p-2"><card.icon className="w-6 h-6 text-white" /></div>

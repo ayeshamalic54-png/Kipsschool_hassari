@@ -181,6 +181,9 @@ router.post("/generate", requireAuth, async (req, res) => {
  */
 router.get("/preview/:classId", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as any).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
     const classId = Number(req.params.classId);
     const [structure] = await db
       .select()

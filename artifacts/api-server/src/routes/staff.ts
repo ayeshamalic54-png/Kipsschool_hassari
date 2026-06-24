@@ -6,6 +6,20 @@ import { requireAuth, hashPassword } from "../lib/auth";
 
 const router = Router();
 
+router.use(requireAuth);
+router.use((req, res, next) => {
+  const reqUser = (req as any).user;
+  if (reqUser.role === "student") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  if (req.method !== "GET" && reqUser.role !== "admin") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+});
+
 function staffRoleToUserRole(staffRole: string): string {
   if (staffRole === "principal" || staffRole === "admin") return "admin";
   return "teacher";

@@ -16,6 +16,9 @@ const router = Router();
 // GET /api/dashboard/stats
 router.get("/stats", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as any).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
     const now           = new Date();
     const today         = now.toISOString().slice(0, 10);
     const currentMonth  = now.toISOString().slice(0, 7);

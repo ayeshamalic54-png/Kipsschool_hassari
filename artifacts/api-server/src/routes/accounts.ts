@@ -6,6 +6,16 @@ import { requireAuth } from "../lib/auth";
 
 const router = Router();
 
+router.use(requireAuth);
+router.use((req, res, next) => {
+  const user = (req as any).user;
+  if (user?.role === "student") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+});
+
 // GET /api/accounts/income
 // Returns ONLY manual income entries. Fee income is computed separately on the
 // frontend from the fees list (so it does not get double-counted here).

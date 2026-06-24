@@ -6,6 +6,15 @@ import { requireAuth } from "../lib/auth";
 
 const router = Router();
 
+router.use(requireAuth);
+router.use((req, res, next) => {
+  if (req.method !== "GET" && (req as any).user?.role === "student") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+});
+
 // GET /api/classes
 router.get("/", requireAuth, async (req, res) => {
   try {

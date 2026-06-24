@@ -67,6 +67,9 @@ router.get("/summary", requireAuth, async (req, res) => {
 // GET /api/attendance/monthly-deductions
 router.get("/monthly-deductions", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as AuthReq).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
     const { month, type } = req.query;
     if (!month || !type) { res.status(400).json({ error: "month and type required" }); return; }
 

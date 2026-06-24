@@ -61,6 +61,7 @@ async function generateAdmissionNumber(): Promise<string> {
 // GET /api/students
 router.get("/", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as any).user;
     const { classId, status, search } = req.query;
     const query = db.select({
       id:               studentsTable.id,
@@ -87,11 +88,15 @@ router.get("/", requireAuth, async (req, res) => {
     .leftJoin(classesTable, eq(studentsTable.classId, classesTable.id));
 
     const conditions = [];
-    if (classId) conditions.push(eq(studentsTable.classId, Number(classId)));
-    if (status)  conditions.push(eq(studentsTable.status, String(status)));
-    if (search)  conditions.push(
-      sql`(${studentsTable.name} ilike ${"%" + search + "%"} or ${studentsTable.admissionNumber} ilike ${"%" + search + "%"})`
-    );
+    if (reqUser.role === "student") {
+      conditions.push(eq(studentsTable.username, reqUser.username));
+    } else {
+      if (classId) conditions.push(eq(studentsTable.classId, Number(classId)));
+      if (status)  conditions.push(eq(studentsTable.status, String(status)));
+      if (search)  conditions.push(
+        sql`(${studentsTable.name} ilike ${"%" + search + "%"} or ${studentsTable.admissionNumber} ilike ${"%" + search + "%"})`
+      );
+    }
 
     const result = conditions.length > 0 ? await query.where(and(...conditions)) : await query;
     res.json(result.map(r => ({
@@ -108,6 +113,9 @@ router.get("/", requireAuth, async (req, res) => {
 // POST /api/students
 router.post("/", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as any).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
     const data = req.body;
     const admissionNumber = await generateAdmissionNumber();
     // username is exactly the admission number (e.g. KIPS-2026-3004)
@@ -248,6 +256,18 @@ router.get("/:id/image", async (req, res) => {
 // GET /api/students/:id
 router.get("/:id", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as any).user;
+    if (reqUser.role === "student") {
+      const [studentByUsername] = await db
+        .select({ id: studentsTable.id })
+        .from(studentsTable)
+        .where(eq(studentsTable.username, reqUser.username));
+      if (!studentByUsername || studentByUsername.id !== Number(req.params.id)) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+    }
+
     const [student] = await db.select({
       id:               studentsTable.id,
       admissionNumber:  studentsTable.admissionNumber,
@@ -288,6 +308,9 @@ router.get("/:id", requireAuth, async (req, res) => {
 // PATCH /api/students/:id
 router.patch("/:id", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as any).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
     const [updated] = await db.update(studentsTable).set({ ...req.body, updatedAt: new Date() }).where(eq(studentsTable.id, Number(req.params.id))).returning();
     if (!updated) { res.status(404).json({ error: "Student not found" }); return; }
     res.json({ ...updated, feeAmount: updated.feeAmount ? Number(updated.feeAmount) : null });
@@ -300,6 +323,9 @@ router.patch("/:id", requireAuth, async (req, res) => {
 // DELETE /api/students/:id
 router.delete("/:id", requireAuth, async (req, res) => {
   try {
+    const reqUser = (req as any).user;
+    if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
+
     await db.delete(studentsTable).where(eq(studentsTable.id, Number(req.params.id)));
     res.status(204).send();
   } catch (err) {

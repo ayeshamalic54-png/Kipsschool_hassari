@@ -6,6 +6,16 @@ import { requireAuth } from "../lib/auth";
 
 const router = Router();
 
+router.use(requireAuth);
+router.use((req, res, next) => {
+  const user = (req as any).user;
+  if (user?.role === "student") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+});
+
 function generateCertNumber(type: string): string {
   const year = new Date().getFullYear();
   const prefix = type.toUpperCase().slice(0, 3);

@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuthStore } from "@/lib/auth";
 
-const STUDENT_ALLOWED = ["/dashboard", "/fees", "/attendance", "/exams", "/login"];
+const STUDENT_ALLOWED = ["/dashboard", "/attendance", "/exams", "/login"];
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();

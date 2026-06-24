@@ -9,6 +9,16 @@ type AuthReq = Request & { user: { id: number; role: string } };
 
 const router = Router();
 
+router.use(requireAuth);
+router.use((req, res, next) => {
+  const user = (req as any).user;
+  if (user?.role === "student") {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+});
+
 async function enrichFee(fee: Record<string, unknown>) {
   const studentId = Number(fee.studentId);
   const [student] = await db
