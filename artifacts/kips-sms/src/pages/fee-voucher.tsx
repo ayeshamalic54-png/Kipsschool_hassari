@@ -246,15 +246,26 @@ export default function FeeVoucher() {
   });
 
   useEffect(() => {
-    setSelectedFees({
-      monthly: true,
-      exam: true,
-      annual: true,
-      transport: true,
-      previous: true,
-      admission: false,
-    });
-  }, [selectedClass]);
+    if (selectedStructure) {
+      setSelectedFees({
+        monthly: selectedStructure.monthlyFee > 0,
+        exam: selectedStructure.examFee > 0,
+        annual: selectedStructure.libraryFee > 0,
+        transport: selectedStructure.transportFee > 0,
+        previous: true,
+        admission: selectedStructure.admissionFee > 0,
+      });
+    } else {
+      setSelectedFees({
+        monthly: true,
+        exam: true,
+        annual: true,
+        transport: true,
+        previous: true,
+        admission: false,
+      });
+    }
+  }, [selectedClass, selectedStructure]);
 
   // ── Duplicate warning state ────────────────────────────────────────────────
   // existingForMonth = fee records already saved for selected class + month
