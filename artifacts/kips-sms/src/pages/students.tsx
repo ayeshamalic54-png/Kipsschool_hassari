@@ -115,7 +115,15 @@ export default function Students() {
   const getGrad  = (cId?: number | null) => cId != null && classColorMap.has(cId) ? GRADIENTS[classColorMap.get(cId)!] : "from-slate-500 to-gray-600";
   const getBgLt  = (cId?: number | null) => cId != null && classColorMap.has(cId) ? BG_LIGHT[classColorMap.get(cId)!]  : "bg-gray-50 border-gray-200";
 
-  const filteredStudents = (section ? students?.filter(s => s.section === section) : students) as StudentRow[] | undefined;
+  const rawFiltered = (section ? students?.filter(s => s.section === section) : students) as StudentRow[] | undefined;
+  const filteredStudents = rawFiltered
+    ? [...rawFiltered].sort((a, b) => {
+        const rankA = getClassRank(a.className || "");
+        const rankB = getClassRank(b.className || "");
+        if (rankA !== rankB) return rankA - rankB;
+        return a.name.localeCompare(b.name);
+      })
+    : [];
   const activeClass = classId ? sortedClasses.find(c => String(c.id) === classId) : null;
   const printDate  = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 

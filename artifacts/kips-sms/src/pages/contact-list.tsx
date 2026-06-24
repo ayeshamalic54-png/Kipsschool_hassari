@@ -57,6 +57,19 @@ const PRINT_STYLES = `
   }
 `;
 
+const getClassRank = (name: string): number => {
+  const n = name.toLowerCase().trim();
+  if (n.includes("play") || n.includes("pg")) return 1;
+  if (n.includes("nursery") || n.includes("nur")) return 2;
+  if (n.includes("prep")) return 3;
+  
+  const match = n.match(/\d+/);
+  if (match) {
+    return 3 + parseInt(match[0], 10);
+  }
+  return 100;
+};
+
 type StudentRow = {
   id: number; name: string; fatherName?: string | null; motherName?: string | null;
   admissionNumber: string; className?: string | null; classId?: number | null;
@@ -94,7 +107,15 @@ export default function ContactList() {
   const getGrad = (cId?: number | null) => cId != null && classColorMap.has(cId) ? GRADIENTS[classColorMap.get(cId)!] : "from-slate-500 to-gray-600";
   const getCard = (cId?: number | null) => cId != null && classColorMap.has(cId) ? CARD_BG[classColorMap.get(cId)! % CARD_BG.length] : CARD_BG[0];
 
-  const filtered = students as StudentRow[] | undefined;
+  const rawFiltered = students as StudentRow[] | undefined;
+  const filtered = rawFiltered
+    ? [...rawFiltered].sort((a, b) => {
+        const rankA = getClassRank(a.className || "");
+        const rankB = getClassRank(b.className || "");
+        if (rankA !== rankB) return rankA - rankB;
+        return a.name.localeCompare(b.name);
+      })
+    : [];
   const activeClass = classId ? sortedClasses.find(c => String(c.id) === classId) : null;
   const printDate = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 
