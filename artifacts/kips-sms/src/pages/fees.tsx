@@ -174,6 +174,7 @@ export default function Fees() {
   const { data: fees, isLoading } = useListFees({});
   const { data: students }        = useListStudents({});
   const { data: classes }         = useListClasses();
+  const student = students?.[0];
   const createMut = useCreateFee();
   const payMut    = usePayFee();
   const currFee   = fees?.find(f => f.id === payOpen);
@@ -562,11 +563,25 @@ export default function Fees() {
 
       {/* ── Filters ── */}
       <div className="flex flex-col sm:flex-row gap-3 no-print">
-        <Select value={classFilter??"all"} onValueChange={v=>setClassFilter(v==="all"?undefined:v)}>
-          <SelectTrigger className="w-full sm:w-40 h-9"><SelectValue placeholder="All Classes"/></SelectTrigger>
+        <Select 
+          value={isStudent ? (student ? String(student.classId) : undefined) : (classFilter ?? "all")} 
+          onValueChange={v => {
+            if (isStudent) return;
+            setClassFilter(v === "all" ? undefined : v);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-40 h-9">
+            <SelectValue placeholder="All Classes"/>
+          </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Classes</SelectItem>
-            {sortedClasses.map(c=><SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+            {isStudent ? (
+              student && <SelectItem value={String(student.classId)}>{student.className || "Class"}</SelectItem>
+            ) : (
+              <>
+                <SelectItem value="all">All Classes</SelectItem>
+                {sortedClasses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+              </>
+            )}
           </SelectContent>
         </Select>
         <div className="relative flex-1">

@@ -112,7 +112,7 @@ function StudentDashboard({ name }: { name: string }) {
           <Skeleton className="h-4 w-48 mt-1.5 bg-white/20" />
         ) : student ? (
           <p className="text-white/80 text-sm mt-1 font-medium">
-            Class: {student.className} {student.section ? `(${student.section})` : ""} · Roll No: {student.rollNumber ?? "—"}
+            Class: {student.className} {student.section ? `(${student.section})` : ""} · Roll No: {student.rollNumber ?? "—"} · Admission No: {student.admissionNumber ?? "—"}
           </p>
         ) : null}
         <p className="text-white/60 text-[10px] mt-1.5 font-light">KIPS School Hassari — Student Portal</p>
