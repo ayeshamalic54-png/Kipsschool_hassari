@@ -585,7 +585,7 @@ export default function FeeVoucher() {
                           checked={selectedFees.annual} 
                           onCheckedChange={(checked) => setSelectedFees(prev => ({ ...prev, annual: !!checked }))}
                         />
-                        <span>Annual Fee (PKR {selectedStructure.libraryFee.toLocaleString()})</span>
+                        <span>Annual Charges (PKR {selectedStructure.libraryFee.toLocaleString()})</span>
                       </label>
                     )}
                     
@@ -790,7 +790,7 @@ export default function FeeVoucher() {
             {selectedFees.annual && (
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1">
-                  Annual Fee Override (PKR)
+                  Annual Charges Override (PKR)
                   <span className="text-xs text-gray-400 ml-1">— leave blank to use class fee</span>
                 </label>
                 <Input type="number" min="0"
@@ -934,7 +934,7 @@ export default function FeeVoucher() {
                           <div>Exam: PKR {exam.toLocaleString()}{e.examOverride ? " ✎" : ""}</div>
                         )}
                         {selectedFees.annual && annual > 0 && (
-                          <div>Annual: PKR {annual.toLocaleString()}{e.annualOverride ? " ✎" : ""}</div>
+                          <div>Annual Charges: PKR {annual.toLocaleString()}{e.annualOverride ? " ✎" : ""}</div>
                         )}
                         {selectedFees.transport && transport > 0 && (
                           <div>Transport: PKR {transport.toLocaleString()}{e.transportOverride ? " ✎" : ""}</div>
