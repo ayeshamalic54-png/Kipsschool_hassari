@@ -44,7 +44,13 @@ router.get("/stats", requireAuth, async (req, res) => {
     const [{ defaulterCount }] = await db
       .select({ defaulterCount: sql<number>`count(distinct ${feesTable.studentId})` })
       .from(feesTable)
-      .where(sql`${feesTable.status} in ('unpaid','partial')`);
+      .innerJoin(studentsTable, eq(feesTable.studentId, studentsTable.id))
+      .where(
+        and(
+          sql`${feesTable.status} in ('unpaid','partial')`,
+          eq(studentsTable.status, "active")
+        )
+      );
 
     const [{ totalTeachers }] = await db
       .select({ totalTeachers: sql<number>`count(*)` })
@@ -59,7 +65,13 @@ router.get("/stats", requireAuth, async (req, res) => {
     const unpaidFees = await db
       .select({ amount: feesTable.amount, paidAmount: feesTable.paidAmount })
       .from(feesTable)
-      .where(sql`${feesTable.status} in ('unpaid','partial')`);
+      .innerJoin(studentsTable, eq(feesTable.studentId, studentsTable.id))
+      .where(
+        and(
+          sql`${feesTable.status} in ('unpaid','partial')`,
+          eq(studentsTable.status, "active")
+        )
+      );
     const pendingFees = unpaidFees.reduce(
       (s, f) => s + Math.max(0, Number(f.amount ?? 0) - Number(f.paidAmount ?? 0)),
       0,

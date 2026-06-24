@@ -43,6 +43,19 @@ function authHeader(): Record<string, string> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+const getClassRank = (name: string): number => {
+  const n = name.toLowerCase().trim();
+  if (n.includes("play") || n.includes("pg")) return 1;
+  if (n.includes("nursery") || n.includes("nur")) return 2;
+  if (n.includes("prep")) return 3;
+  
+  const match = n.match(/\d+/);
+  if (match) {
+    return 3 + parseInt(match[0], 10);
+  }
+  return 100;
+};
+
 export default function Classes() {
   const [, setLocation]      = useLocation();
   const { toast }            = useToast();
@@ -58,6 +71,10 @@ export default function Classes() {
 
   const { data: classes, isLoading } = useListClasses();
   const createMutation = useCreateClass();
+
+  const sortedClasses = classes
+    ? [...classes].sort((a, b) => getClassRank(a.name) - getClassRank(b.name))
+    : [];
 
   // ── Create form ────────────────────────────────────────────────────────────
   const createForm = useForm<ClassFormValues>({
@@ -207,14 +224,14 @@ export default function Classes() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1, 2, 3, 4, 5, 6].map(i => <Skeleton key={i} className="h-36" />)}
         </div>
-      ) : !classes?.length ? (
+      ) : !sortedClasses.length ? (
         <div className="text-center py-20 text-gray-400">
           <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30" />
           <p className="text-sm">No classes found. Add one above.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {classes?.map(cls => (
+          {sortedClasses.map(cls => (
             <Card
               key={cls.id}
               className="hover:shadow-lg transition-all cursor-pointer group border hover:border-indigo-300 hover:-translate-y-0.5"

@@ -27,11 +27,13 @@ async function enrichFee(fee: Record<string, unknown>) {
       admissionNumber: studentsTable.admissionNumber,
       classId: studentsTable.classId,
       fatherName: studentsTable.fatherName,
+      status: studentsTable.status,
     })
     .from(studentsTable)
     .where(eq(studentsTable.id, studentId));
+  if (!student) return null;
   let className = null;
-  if (student?.classId) {
+  if (student.classId) {
     const [cls] = await db
       .select({ name: classesTable.name })
       .from(classesTable)
@@ -49,11 +51,12 @@ async function enrichFee(fee: Record<string, unknown>) {
     fine,
     discount,
     remainingAmount: Math.max(0, amount + fine - discount - paidAmount),
-    studentName: student?.name ?? null,
-    admissionNumber: student?.admissionNumber ?? null,
-    fatherName: student?.fatherName ?? null,
-    classId: student?.classId ?? null,
+    studentName: student.name,
+    admissionNumber: student.admissionNumber,
+    fatherName: student.fatherName ?? null,
+    classId: student.classId ?? null,
     className,
+    studentStatus: student.status,
   };
 }
 
@@ -85,7 +88,9 @@ router.get("/", requireAuth, async (req, res) => {
       overdue.map(f => enrichFee(f as unknown as Record<string, unknown>))
     );
 
-    res.json(result);
+    const filtered = result.filter(f => f && f.studentStatus === "active");
+
+    res.json(filtered);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

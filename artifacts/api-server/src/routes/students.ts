@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { studentsTable, classesTable, usersTable, feeStructuresTable } from "@workspace/db";
+import { studentsTable, classesTable, usersTable, feeStructuresTable, feesTable, attendanceTable, examResultsTable, certificatesTable } from "@workspace/db";
 import { eq, sql, and } from "drizzle-orm";
 import { requireAuth, hashPassword } from "../lib/auth";
 import multer from "multer";
@@ -326,7 +326,23 @@ router.delete("/:id", requireAuth, async (req, res) => {
     const reqUser = (req as any).user;
     if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
 
-    await db.delete(studentsTable).where(eq(studentsTable.id, Number(req.params.id)));
+    const studentId = Number(req.params.id);
+
+    // Cascade delete related records
+    await db.delete(feesTable).where(eq(feesTable.studentId, studentId));
+    await db.delete(attendanceTable).where(eq(attendanceTable.studentId, studentId));
+    await db.delete(examResultsTable).where(eq(examResultsTable.studentId, studentId));
+    await db.delete(certificatesTable).where(eq(certificatesTable.studentId, studentId));
+    await db.delete(usersTable).where(
+      and(
+        eq(usersTable.relatedId, studentId),
+        eq(usersTable.role, "student")
+      )
+    );
+
+    // Delete student core record
+    await db.delete(studentsTable).where(eq(studentsTable.id, studentId));
+
     res.status(204).send();
   } catch (err) {
     req.log.error(err);

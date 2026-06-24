@@ -62,6 +62,19 @@ const PRINT_STYLES = `
   }
 `;
 
+const getClassRank = (name: string): number => {
+  const n = name.toLowerCase().trim();
+  if (n.includes("play") || n.includes("pg")) return 1;
+  if (n.includes("nursery") || n.includes("nur")) return 2;
+  if (n.includes("prep")) return 3;
+  
+  const match = n.match(/\d+/);
+  if (match) {
+    return 3 + parseInt(match[0], 10);
+  }
+  return 100;
+};
+
 type StudentRow = {
   id: number; name: string; fatherName?: string | null;
   admissionNumber: string; className?: string | null;
@@ -94,11 +107,7 @@ export default function Students() {
   const deleteMutation = useDeleteStudent();
 
   const sortedClasses = classes
-    ? [...classes].sort((a, b) => {
-        const na = parseInt(a.name) || 0, nb = parseInt(b.name) || 0;
-        if (na && nb) return na - nb;
-        return a.name.localeCompare(b.name);
-      })
+    ? [...classes].sort((a, b) => getClassRank(a.name) - getClassRank(b.name))
     : [];
 
   const classColorMap = new Map<number, number>();

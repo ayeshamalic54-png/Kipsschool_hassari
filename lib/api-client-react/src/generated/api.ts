@@ -1192,76 +1192,52 @@ export const usePayFee = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getPayFeeMutationOptions(options));
-    }
-
-export const getGetFeeDefaultersUrl = () => {
-
-
-
-
+    }export const getGetFeeDefaultersUrl = (params?: { status?: string }) => {
+  if (params?.status) {
+    return `/api/fees/defaulters?status=${params.status}`
+  }
   return `/api/fees/defaulters`
 }
 
 /**
  * @summary Get fee defaulters list
  */
-export const getFeeDefaulters = async ( options?: RequestInit): Promise<FeeRecord[]> => {
-
-  return customFetch<FeeRecord[]>(getGetFeeDefaultersUrl(),
+export const getFeeDefaulters = async (params?: { status?: string }, options?: RequestInit): Promise<FeeRecord[]> => {
+  return customFetch<FeeRecord[]>(getGetFeeDefaultersUrl(params),
   {
     ...options,
     method: 'GET'
-
-
   }
 );}
 
-
-
-
-
-export const getGetFeeDefaultersQueryKey = () => {
-    return [
-    `/api/fees/defaulters`
-    ] as const;
+export const getGetFeeDefaultersQueryKey = (params?: { status?: string }) => {
+    return params?.status 
+      ? [`/api/fees/defaulters`, params.status] as const
+      : [`/api/fees/defaulters`] as const;
     }
 
-
-export const getGetFeeDefaultersQueryOptions = <TData = Awaited<ReturnType<typeof getFeeDefaulters>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeeDefaulters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+export const getGetFeeDefaultersQueryOptions = <TData = Awaited<ReturnType<typeof getFeeDefaulters>>, TError = ErrorType<unknown>>(
+  params?: { status?: string },
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeeDefaulters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
 ) => {
-
-const {query: queryOptions, request: requestOptions} = options ?? {};
-
-  const queryKey =  queryOptions?.queryKey ?? getGetFeeDefaultersQueryKey();
-
-
-
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeeDefaulters>>> = ({ signal }) => getFeeDefaulters({ signal, ...requestOptions });
-
-
-
-
-
-   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeeDefaulters>>, TError, TData> & { queryKey: QueryKey }
+  const {query: queryOptions, request: requestOptions} = options ?? {};
+  const queryKey =  queryOptions?.queryKey ?? getGetFeeDefaultersQueryKey(params);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getFeeDefaulters>>> = ({ signal }) => getFeeDefaulters(params, { signal, ...requestOptions });
+  return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getFeeDefaulters>>, TError, TData> & { queryKey: QueryKey }
 }
 
 export type GetFeeDefaultersQueryResult = NonNullable<Awaited<ReturnType<typeof getFeeDefaulters>>>
 export type GetFeeDefaultersQueryError = ErrorType<unknown>
 
-
 /**
  * @summary Get fee defaulters list
  */
-
 export function useGetFeeDefaulters<TData = Awaited<ReturnType<typeof getFeeDefaulters>>, TError = ErrorType<unknown>>(
+  params?: { status?: string },
   options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getFeeDefaulters>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
-
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-
-  const queryOptions = getGetFeeDefaultersQueryOptions(options)
-
+  const queryOptions = getGetFeeDefaultersQueryOptions(params, options)
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
-
   return { ...query, queryKey: queryOptions.queryKey };
 }
 

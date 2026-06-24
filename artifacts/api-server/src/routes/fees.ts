@@ -17,11 +17,13 @@ async function enrichFee(fee: Record<string, unknown>) {
       admissionNumber: studentsTable.admissionNumber,
       classId: studentsTable.classId,
       fatherName: studentsTable.fatherName,
+      status: studentsTable.status,
     })
     .from(studentsTable)
     .where(eq(studentsTable.id, studentId));
+  if (!student) return null;
   let className = null;
-  if (student?.classId) {
+  if (student.classId) {
     const [cls] = await db
       .select({ name: classesTable.name })
       .from(classesTable)
@@ -39,12 +41,13 @@ async function enrichFee(fee: Record<string, unknown>) {
     fine,
     discount,
     remainingAmount: Math.max(0, amount + fine - discount - paidAmount),
-    studentName: student?.name ?? null,
-    admissionNumber: student?.admissionNumber ?? null,
-    fatherName: student?.fatherName ?? null,
+    studentName: student.name,
+    admissionNumber: student.admissionNumber,
+    fatherName: student.fatherName ?? null,
     // FIX: include classId so frontend class filter works correctly
-    classId: student?.classId ?? null,
+    classId: student.classId ?? null,
     className,
+    studentStatus: student.status,
   };
 }
 
@@ -74,7 +77,7 @@ router.get("/", requireAuth, async (req, res) => {
       ? await query.where(and(...conditions))
       : await query;
     const result = await Promise.all(fees.map(f => enrichFee(f as unknown as Record<string, unknown>)));
-    res.json(result);
+    res.json(result.filter(Boolean));
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -175,9 +178,12 @@ router.post("/:id/pay", requireAuth, async (req, res) => {
 // GET /api/fees/defaulters
 router.get("/defaulters", requireAuth, async (req, res) => {
   try {
+    const { status } = req.query; // 'active' or 'inactive'
     const fees = await db.select().from(feesTable).where(eq(feesTable.status, "unpaid"));
     const result = await Promise.all(fees.map(f => enrichFee(f as unknown as Record<string, unknown>)));
-    res.json(result);
+    const targetStatus = status === "inactive" ? ["inactive", "left"] : ["active"];
+    const filtered = result.filter(f => f && targetStatus.includes(f.studentStatus));
+    res.json(filtered);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

@@ -164,6 +164,9 @@ export default function Arrears() {
   );
   const byStudent: Record<number, StudentArrears> = {};
   for (const f of overdueFees) {
+    if (!f.studentName || f.studentName === "—" || !f.className || f.className === "—") {
+      continue;
+    }
     const sid = f.studentId;
     if (!byStudent[sid]) byStudent[sid] = {
       studentId:       sid,

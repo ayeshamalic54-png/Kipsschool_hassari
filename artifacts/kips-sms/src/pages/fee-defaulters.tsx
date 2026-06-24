@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useGetFeeDefaulters } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -31,13 +31,40 @@ const PRINT_STYLES = `
 
 const printDate = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
 
+const getCleanMonth = (m: string) => {
+  const match = m.match(/\d{4}-\d{2}/);
+  return match ? match[0] : m;
+};
+
+const formatCleanMonth = (m: string) => {
+  const match = m.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return m;
+  const [_, year, month] = match;
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+};
+
+const getClassRank = (name: string): number => {
+  const n = name.toLowerCase().trim();
+  if (n.includes("play") || n.includes("pg")) return 1;
+  if (n.includes("nursery") || n.includes("nur")) return 2;
+  if (n.includes("prep")) return 3;
+  
+  const match = n.match(/\d+/);
+  if (match) {
+    return 3 + parseInt(match[0], 10);
+  }
+  return 100;
+};
+
 const TH: React.CSSProperties = { padding:"7px 9px", background:"#fee2e2", color:"#7f1d1d", fontWeight:700, fontSize:9, textAlign:"left", border:"1px solid #fca5a5" };
 const TD: React.CSSProperties = { padding:"6px 9px", border:"1px solid #e5e7eb", fontSize:9, color:"#1f2937", background:"#ffffff" };
 const TDA: React.CSSProperties = { ...TD, background:"#fff7f7" };
 
 // ── WhatsApp message generator ────────────────────────────────────────────────
-function buildWhatsAppMsg(studentName: string, className: string, month: string, amount: number, dueDate: string, phone?: string | null): string {
-  const msg = `Assalam u Alaikum! 🌟\n\nKIPS School Hassari would like to remind you that the fee for your child *${studentName}* (Class: ${className}) for the month of *${month}* is:\n\n💰 Amount: *PKR ${amount.toLocaleString()}*\n📅 Due Date: *${dueDate}*\n\nIt has not been paid yet. Kindly make the payment as soon as possible..\n\nThank you! 🙏\nKIPS School Hassari`;
+function buildWhatsAppMsg(studentName: string, className: string, month: string, amount: number, dueDate: string, notes: string, phone?: string | null): string {
+  const monthText = month.includes(",") ? `months of *${month}*` : `month of *${month}*`;
+  const msg = `Assalam u Alaikum! 🌟\n\nKIPS School Hassari would like to remind you that the fee for your child *${studentName}* (Class: ${className}) for the ${monthText} is:\n\n${notes}\n\n💵 Total Payable: *PKR ${amount.toLocaleString()}*\n📅 Due Date: *${dueDate}*\n\nIt has not been paid yet. Kindly make the payment as soon as possible..\n\nThank you! 🙏\nKIPS School Hassari`;
 
   const encoded = encodeURIComponent(msg);
   const cleanPhone = (phone ?? "").replace(/\D/g, "");
@@ -49,6 +76,7 @@ function buildWhatsAppMsg(studentName: string, className: string, month: string,
 
 interface FeeItem {
   id: number;
+  studentId?: number | null;
   studentName?: string | null;
   admissionNumber?: string | null;
   className?: string | null;
@@ -57,10 +85,13 @@ interface FeeItem {
   fine?: number | null;
   dueDate?: string | null;
   phone?: string | null;
+  notes?: string;
+  waNotes?: string;
 }
 
 export default function FeeDefaulters() {
-  const { data: defaulters, isLoading } = useGetFeeDefaulters();
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive">("active");
+  const { data: defaulters, isLoading } = useGetFeeDefaulters({ status: statusFilter });
 
   useEffect(() => {
     const prev = document.getElementById("kips-print-styles"); if (prev) prev.remove();
@@ -69,7 +100,59 @@ export default function FeeDefaulters() {
     return () => { document.getElementById("kips-print-styles")?.remove(); };
   }, []);
 
-  const list         = (defaulters ?? []) as FeeItem[];
+  const rawList      = (defaulters ?? []) as FeeItem[];
+  
+  // Group by student ID to consolidate all fee records across all months
+  const groupedMap: Record<string, { first: FeeItem; items: FeeItem[] }> = {};
+  for (const f of rawList) {
+    if (!f.studentName || !f.className) {
+      continue;
+    }
+    const studentId = f.studentId || (f as any).student_id;
+    const key = String(studentId);
+    if (!groupedMap[key]) {
+      groupedMap[key] = { first: f, items: [] };
+    }
+    groupedMap[key].items.push(f);
+  }
+
+  const list: FeeItem[] = Object.values(groupedMap).map(({ first, items }) => {
+    const amount = items.reduce((s, i) => s + (i.amount ?? 0), 0);
+    const fine = items.reduce((s, i) => s + (i.fine ?? 0), 0);
+    
+    // Detailed notes lists
+    const notesList = items.map(i => {
+      const m = formatCleanMonth(getCleanMonth(i.month));
+      const label = (i as any).notes || 'Fee';
+      return `${m} ${label}: PKR ${Number(i.amount ?? 0).toLocaleString()}`;
+    });
+    const notes = notesList.join(", ");
+    
+    const waNotesList = items.map(i => {
+      const m = formatCleanMonth(getCleanMonth(i.month));
+      const label = (i as any).notes || 'Fee';
+      return `• ${m} - ${label}: *PKR ${Number(i.amount ?? 0).toLocaleString()}*`;
+    });
+    const waNotes = waNotesList.join("\n");
+
+    const uniqueMonths = Array.from(new Set(items.map(i => formatCleanMonth(getCleanMonth(i.month)))));
+    const month = uniqueMonths.join(", ");
+
+    // Use the latest due date among all consolidated items
+    const dueDates = items.map(i => i.dueDate).filter(Boolean) as string[];
+    const dueDate = dueDates.length > 0 ? dueDates.sort().reverse()[0] : (first.dueDate ?? "");
+
+    return {
+      ...first,
+      month,
+      amount,
+      fine,
+      dueDate,
+      notes,
+      waNotes,
+    } as unknown as FeeItem;
+  });
+
   const totalPending = list.reduce((s, f) => s + (f.amount ?? 0), 0);
   const totalFine    = list.reduce((s, f) => s + (f.fine   ?? 0), 0);
   const grandTotal   = totalPending + totalFine;
@@ -80,7 +163,7 @@ export default function FeeDefaulters() {
     if (!byClass[key]) byClass[key] = [];
     byClass[key].push(f);
   }
-  const classNames = Object.keys(byClass).sort();
+  const classNames = Object.keys(byClass).sort((a, b) => getClassRank(a) - getClassRank(b));
 
   // ── Print portal ──────────────────────────────────────────────────────────
   const printPortal = createPortal(
@@ -129,7 +212,12 @@ export default function FeeDefaulters() {
                     <td style={i%2===0?TD:TDA}>{i+1}</td>
                     <td style={{...(i%2===0?TD:TDA),fontWeight:600}}>{fee.studentName||"—"}</td>
                     <td style={i%2===0?TD:TDA}>{fee.admissionNumber||"—"}</td>
-                    <td style={i%2===0?TD:TDA}>{fee.month}</td>
+                    <td style={i%2===0?TD:TDA}>
+                      <div>{fee.month}</div>
+                      {fee.notes && (
+                        <div style={{ fontSize:7, color:"#6b7280", marginTop:2, fontStyle:"italic" }}>{fee.notes}</div>
+                      )}
+                    </td>
                     <td style={{...(i%2===0?TD:TDA),color:"#b91c1c",fontWeight:700}}>PKR {(fee.amount??0).toLocaleString()}</td>
                     <td style={i%2===0?TD:TDA}>{(fee.fine??0)>0?`PKR ${(fee.fine??0).toLocaleString()}`:"—"}</td>
                     <td style={i%2===0?TD:TDA}>{fee.dueDate}</td>
@@ -174,6 +262,26 @@ export default function FeeDefaulters() {
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="w-4 h-4 mr-2" /> Print Report
           </Button>
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex gap-1.5 flex-wrap no-print">
+          {[
+            { key: "active", label: "Active Students" },
+            { key: "inactive", label: "Inactive / Left Students" }
+          ].map(s => (
+            <button
+              key={s.key}
+              onClick={() => setStatusFilter(s.key as "active" | "inactive")}
+              className={`px-4 py-2 rounded-full text-xs font-semibold capitalize transition-all border ${
+                statusFilter === s.key
+                  ? "bg-red-600 text-white border-red-600 shadow-sm font-bold"
+                  : "bg-white text-gray-600 border-gray-200 hover:border-gray-400 hover:text-gray-900"
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
 
         {/* Summary cards */}
@@ -224,7 +332,7 @@ export default function FeeDefaulters() {
                     <div className="divide-y">
                       {byClass[cls].map((fee, i) => {
                         const total    = (fee.amount ?? 0) + (fee.fine ?? 0);
-                        const waMsg    = buildWhatsAppMsg(fee.studentName ?? "Student", fee.className ?? "", fee.month, fee.amount ?? 0, fee.dueDate ?? "", fee.phone);
+                        const waMsg    = buildWhatsAppMsg(fee.studentName ?? "Student", fee.className ?? "", fee.month, total, fee.dueDate ?? "", fee.waNotes || "", fee.phone);
                         const hasPhone = !!(fee.phone?.trim());
 
                         return (
@@ -245,6 +353,11 @@ export default function FeeDefaulters() {
                                   </span>
                                 )}
                               </div>
+                              {fee.notes && (
+                                <p className="text-[10px] text-gray-400 font-normal mt-1 italic">
+                                  Breakdown: {fee.notes}
+                                </p>
+                              )}
                             </div>
 
                             {/* Amount */}
