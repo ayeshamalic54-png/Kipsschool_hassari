@@ -115,10 +115,10 @@ function VoucherCopy({
   // ALL fee components combined into one list — single voucher
   const feeRows: { label: string; amount: number; color?: string; prefix?: string }[] = [];
   if (selectedFees.monthly && monthlyFeeToUse  > 0) feeRows.push({ label: "Monthly Tuition Fee",     amount: monthlyFeeToUse  });
+  if (selectedFees.admission && admissionFeeToUse > 0) feeRows.push({ label: "Admission Fee", amount: admissionFeeToUse, color: "#059669" });
   if (selectedFees.exam && examFeeToUse > 0) feeRows.push({ label: "Exam / Test Fee", amount: examFeeToUse, color: "#7c3aed" });
   if (selectedFees.annual && annualFeeToUse > 0) feeRows.push({ label: "Annual Charges", amount: annualFeeToUse, color: "#0369a1" });
   if (selectedFees.transport && transportFeeToUse > 0) feeRows.push({ label: "Transport Fee", amount: transportFeeToUse, color: "#0891b2" });
-  if (selectedFees.admission && admissionFeeToUse > 0) feeRows.push({ label: "Admission Fee", amount: admissionFeeToUse, color: "#059669" });
   if (selectedFees.previous && previousArrears > 0) feeRows.push({ label: "Previous Arrears (Auto)",  amount: previousArrears,  color: "#dc2626" });
   if (manualArrears   > 0) feeRows.push({ label: "Additional Arrears",       amount: manualArrears,    color: "#b91c1c" });
   if (fine            > 0) feeRows.push({ label: "Late Fine",                amount: fine,             color: "#dc2626" });
