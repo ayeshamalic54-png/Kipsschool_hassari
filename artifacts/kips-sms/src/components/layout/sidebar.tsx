@@ -20,7 +20,7 @@ const getNavigation = (role?: string) => {
     { name: "Students",       href: "/students",        icon: Users,           gradient: "from-blue-500 to-cyan-500",     roles: ["admin", "teacher"] },
     { name: "Contact List",   href: "/students/contacts", icon: PhoneCall,     gradient: "from-sky-400 to-blue-500",      roles: ["admin", "teacher"] },
     { name: "Classes",        href: "/classes",         icon: BookOpen,        gradient: "from-indigo-500 to-purple-500", roles: ["admin", "teacher"] },
-    { name: "Fees",           href: "/fees",            icon: CreditCard,      gradient: "from-emerald-500 to-green-500", roles: ["admin"] },
+    { name: "Fees",           href: "/fees",            icon: CreditCard,      gradient: "from-emerald-500 to-green-500", roles: ["admin", "student"] },
     { name: "Fee Structure",  href: "/fee-structure",   icon: LayoutList,      gradient: "from-sky-500 to-blue-600",      roles: ["admin"] },
     { name: "Fee Voucher",    href: "/fees/voucher",    icon: ReceiptText,     gradient: "from-teal-500 to-cyan-500",     roles: ["admin"] },
     { name: "Fee Defaulters", href: "/fees/defaulters", icon: AlertTriangle,   gradient: "from-red-500 to-rose-600",      roles: ["admin"] },

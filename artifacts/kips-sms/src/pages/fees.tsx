@@ -40,6 +40,19 @@ async function apiFetch(path: string, options?: RequestInit) {
   return res.status === 204 ? null : res.json();
 }
 
+const getCleanMonth = (m: string) => {
+  const match = m.match(/\d{4}-\d{2}/);
+  return match ? match[0] : m;
+};
+
+const formatCleanMonth = (m: string) => {
+  const match = m.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return m;
+  const [_, year, month] = match;
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+};
+
 type FeeStructure = {
   id: number; classId: number; className: string | null;
   monthlyFee: number; admissionFee: number; lateFine: number; notes: string | null;
@@ -180,7 +193,7 @@ export default function Fees() {
   const allFees      = fees ?? [];
 
   // FIX: Filter by classId (numeric comparison) instead of className string match
-  const displayFees  = allFees
+  const rawDisplayFees = allFees
     .filter(f => {
       if (!classFilter) return true;
       const fExt = f as unknown as Record<string,unknown>;
@@ -199,6 +212,45 @@ export default function Fees() {
       return (f.studentName??"").toLowerCase().includes(q) ||
              ((ext.admissionNumber as string)??"").toLowerCase().includes(q);
     });
+
+  const displayFees = isStudent
+    ? (() => {
+        const uniqueMonths = Array.from(new Set(rawDisplayFees.map(f => getCleanMonth(f.month))));
+        return uniqueMonths.map(m => {
+          const items = rawDisplayFees.filter(f => getCleanMonth(f.month) === m);
+          const first = items[0];
+          const amount = items.reduce((s, i) => s + Number(i.amount ?? 0), 0);
+          const paidAmount = items.reduce((s, i) => s + Number(i.paidAmount ?? 0), 0);
+          const remainingAmount = items.reduce((s, i) => s + Number(i.remainingAmount ?? 0), 0);
+          const fine = items.reduce((s, i) => s + Number((i as any).fine ?? 0), 0);
+          const discount = items.reduce((s, i) => s + Number((i as any).discount ?? 0), 0);
+          
+          let status: "paid" | "unpaid" | "partial" = "unpaid";
+          const allPaid = items.every(i => i.status === "paid");
+          const allUnpaid = items.every(i => i.status === "unpaid");
+          if (allPaid) {
+            status = "paid";
+          } else if (allUnpaid) {
+            status = "unpaid";
+          } else {
+            status = "partial";
+          }
+
+          return {
+            ...first,
+            id: first?.id ?? 0,
+            month: formatCleanMonth(m),
+            amount,
+            paidAmount,
+            remainingAmount,
+            status,
+            fine,
+            discount,
+            notes: items.map(i => `${i.notes ?? 'Fee'}: PKR ${Number(i.amount).toLocaleString()}`).join(", "),
+          } as unknown as FeeRecord;
+        });
+      })()
+    : rawDisplayFees;
 
   const totalAmt  = allFees.reduce((s,f)=>s+f.amount,0);
   const totalPaid = allFees.reduce((s,f)=>s+(f.paidAmount??0),0);
@@ -271,7 +323,12 @@ export default function Fees() {
                     <td style={{...TD(i%2===1),fontWeight:600}}>{fee.studentName||"—"}</td>
                     <td style={TD(i%2===1)}>{(e.fatherName as string)||"—"}</td>
                     <td style={TD(i%2===1)}>{fee.className||"—"}</td>
-                    <td style={TD(i%2===1)}>{fee.month}</td>
+                    <td style={TD(i%2===1)}>
+                      <div>{fee.month}</div>
+                      {isStudent && ext(fee).notes && (
+                        <div style={{ fontSize: 8, color: "#6b7280", marginTop: 2 }}>{ext(fee).notes as string}</div>
+                      )}
+                    </td>
                     <td style={{...TD(i%2===1),fontWeight:600}}>PKR {fee.amount.toLocaleString()}</td>
                     <td style={TD(i%2===1)}>{fine>0?`PKR ${fine.toLocaleString()}`:"—"}</td>
                     <td style={{...TD(i%2===1),color:"#059669",fontWeight:700}}>PKR {(fee.paidAmount??0).toLocaleString()}</td>
@@ -563,6 +620,11 @@ export default function Fees() {
                           <SI className="w-3 h-3"/>{s.label}
                         </span>
                       </div>
+                      {isStudent && ext(fee).notes && (
+                        <p className="text-[10px] text-gray-500 font-normal mt-1.5 leading-relaxed bg-white/40 p-1.5 rounded border border-white/30">
+                          {ext(fee).notes as string}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-xs text-gray-400">{fee.month}</p>
@@ -629,7 +691,12 @@ export default function Fees() {
                     <td className="px-4 py-3 font-semibold text-gray-900">{fee.studentName||"—"}</td>
                     <td className="px-4 py-3 font-mono text-xs text-purple-600 font-bold">{admNo}</td>
                     <td className="px-4 py-3 text-gray-600">{fee.className||"—"}</td>
-                    <td className="px-4 py-3 text-gray-600">{fee.month}</td>
+                    <td className="px-4 py-3 text-gray-600">
+                      <div>{fee.month}</div>
+                      {isStudent && ext(fee).notes && (
+                        <div className="text-[10px] text-gray-400 font-normal mt-0.5">{ext(fee).notes as string}</div>
+                      )}
+                    </td>
                     <td className="px-4 py-3 font-semibold">PKR {fee.amount.toLocaleString()}</td>
                     <td className="px-4 py-3 text-orange-600">{fineN>0?`+PKR ${fineN.toLocaleString()}`:"—"}</td>
                     <td className="px-4 py-3 text-emerald-600 font-semibold">PKR {(fee.paidAmount??0).toLocaleString()}</td>

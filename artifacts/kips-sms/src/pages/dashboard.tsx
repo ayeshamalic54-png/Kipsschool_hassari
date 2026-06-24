@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGetDashboardStats, useListFees, useListAttendance } from "@workspace/api-client-react";
+import { useGetDashboardStats, useListFees, useListAttendance, useListStudents } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { motion } from "framer-motion";
@@ -22,14 +22,24 @@ const getCleanMonth = (m: string) => {
   return match ? match[0] : m;
 };
 
+const formatCleanMonth = (m: string) => {
+  const match = m.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return m;
+  const [_, year, month] = match;
+  const date = new Date(Number(year), Number(month) - 1, 1);
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+};
+
 // ── Student Dashboard ────────────────────────────────────────────────────────
 function StudentDashboard({ name }: { name: string }) {
   const { data: fees,       isLoading: feesLoading } = useListFees({});
   const { data: attendance, isLoading: attLoading  } = useListAttendance({ type: "student" });
+  const { data: students,   isLoading: stuLoading  } = useListStudents({});
 
+  const student = students?.[0]; // Current student profile
   const today = new Date().toLocaleDateString("en-PK", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-  // Calculate unique months and categorize them
+  // Calculate unique months and group fee records by clean month
   const uniqueMonths = Array.from(new Set((fees ?? []).map(f => getCleanMonth(f.month))));
   let paidMonthsCount = 0;
   let pendingMonthsCount = 0;
@@ -53,6 +63,41 @@ function StudentDashboard({ name }: { name: string }) {
   const absent  = allAtt.filter(a => a.status === "absent").length;
   const late    = allAtt.filter(a => a.status === "late").length;
 
+  // Group fee items for list rendering
+  const groupedFeesList = uniqueMonths.map(m => {
+    const items = (fees ?? []).filter(f => getCleanMonth(f.month) === m);
+    const amount = items.reduce((s, i) => s + Number(i.amount ?? 0), 0);
+    const paidAmount = items.reduce((s, i) => s + Number(i.paidAmount ?? 0), 0);
+    const remainingAmount = items.reduce((s, i) => s + Number(i.remainingAmount ?? 0), 0);
+    const fine = items.reduce((s, i) => s + Number(i.fine ?? 0), 0);
+    const discount = items.reduce((s, i) => s + Number(i.discount ?? 0), 0);
+    
+    let status: "paid" | "unpaid" | "partial" = "unpaid";
+    const allPaid = items.every(i => i.status === "paid");
+    const allUnpaid = items.every(i => i.status === "unpaid");
+    if (allPaid) {
+      status = "paid";
+    } else if (allUnpaid) {
+      status = "unpaid";
+    } else {
+      status = "partial";
+    }
+
+    const dueDate = items[0]?.dueDate ?? "—";
+    const notes = items.map(i => `${i.notes ?? 'Fee'}: PKR ${i.amount}`).join(", ");
+
+    return {
+      id: m,
+      month: m,
+      amount,
+      paidAmount,
+      remainingAmount,
+      status,
+      dueDate,
+      notes,
+    };
+  });
+
   return (
     <div className="space-y-7">
       <motion.div
@@ -63,7 +108,14 @@ function StudentDashboard({ name }: { name: string }) {
           <CalendarDays className="w-3.5 h-3.5" />{today}
         </p>
         <h1 className="text-2xl font-bold">Welcome, {name}</h1>
-        <p className="text-white/70 text-sm mt-1">KIPS School Hassari — Student Portal</p>
+        {stuLoading ? (
+          <Skeleton className="h-4 w-48 mt-1.5 bg-white/20" />
+        ) : student ? (
+          <p className="text-white/80 text-sm mt-1 font-medium">
+            Class: {student.className} {student.section ? `(${student.section})` : ""} · Roll No: {student.rollNumber ?? "—"}
+          </p>
+        ) : null}
+        <p className="text-white/60 text-[10px] mt-1.5 font-light">KIPS School Hassari — Student Portal</p>
       </motion.div>
 
       <div>
@@ -135,7 +187,7 @@ function StudentDashboard({ name }: { name: string }) {
         </div>
       </div>
 
-      {!feesLoading && (fees?.length ?? 0) > 0 && (
+      {!feesLoading && groupedFeesList.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base font-semibold flex items-center gap-2">
@@ -153,12 +205,15 @@ function StudentDashboard({ name }: { name: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {fees?.map(f => (
+                  {groupedFeesList.map(f => (
                     <tr key={f.id} className="border-t hover:bg-gray-50">
-                      <td className="py-2.5 px-4 font-medium text-gray-800">{f.month}</td>
-                      <td className="py-2.5 px-4">PKR {f.amount.toLocaleString()}</td>
-                      <td className="py-2.5 px-4 text-emerald-600">PKR {(f.paidAmount ?? 0).toLocaleString()}</td>
-                      <td className="py-2.5 px-4 text-red-600">PKR {(f.remainingAmount ?? 0).toLocaleString()}</td>
+                      <td className="py-2.5 px-4 font-medium text-gray-800">
+                        <div>{formatCleanMonth(f.month)}</div>
+                        {f.notes && <div className="text-[10px] text-gray-400 font-normal mt-0.5">{f.notes}</div>}
+                      </td>
+                      <td className="py-2.5 px-4 font-semibold">PKR {f.amount.toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-emerald-600 font-semibold">PKR {f.paidAmount.toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-red-600 font-bold">PKR {f.remainingAmount.toLocaleString()}</td>
                       <td className="py-2.5 px-4">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
                           f.status === "paid"    ? "bg-emerald-100 text-emerald-700" :
@@ -167,7 +222,7 @@ function StudentDashboard({ name }: { name: string }) {
                           {f.status}
                         </span>
                       </td>
-                      <td className="py-2.5 px-4 text-gray-500">{f.dueDate ?? "—"}</td>
+                      <td className="py-2.5 px-4 text-gray-500">{f.dueDate}</td>
                     </tr>
                   ))}
                 </tbody>
