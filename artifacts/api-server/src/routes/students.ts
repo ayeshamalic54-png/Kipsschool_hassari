@@ -80,7 +80,7 @@ router.get("/", requireAuth, async (req, res) => {
       rollNumber:       studentsTable.rollNumber,
       feeAmount:        studentsTable.feeAmount,
       status:           studentsTable.status,
-      imageUrl:         studentsTable.imageUrl,
+      hasImage:         sql<boolean>`coalesce(${studentsTable.imageUrl} is not null and ${studentsTable.imageUrl} != '', false)`,
       username:         studentsTable.username,
       createdAt:        studentsTable.createdAt,
     })
@@ -102,7 +102,7 @@ router.get("/", requireAuth, async (req, res) => {
     res.json(result.map(r => ({
       ...r,
       feeAmount: r.feeAmount ? Number(r.feeAmount) : null,
-      imageUrl: r.imageUrl ? `/api/students/${r.id}/image` : null
+      imageUrl: r.hasImage ? `/api/students/${r.id}/image` : null
     })));
   } catch (err) {
     req.log.error(err);
@@ -285,7 +285,7 @@ router.get("/:id", requireAuth, async (req, res) => {
       rollNumber:       studentsTable.rollNumber,
       feeAmount:        studentsTable.feeAmount,
       status:           studentsTable.status,
-      imageUrl:         studentsTable.imageUrl,
+      hasImage:         sql<boolean>`coalesce(${studentsTable.imageUrl} is not null and ${studentsTable.imageUrl} != '', false)`,
       username:         studentsTable.username,
       createdAt:        studentsTable.createdAt,
     })
@@ -297,7 +297,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     res.json({
       ...student,
       feeAmount: student.feeAmount ? Number(student.feeAmount) : null,
-      imageUrl: student.imageUrl ? `/api/students/${student.id}/image` : null
+      imageUrl: student.hasImage ? `/api/students/${student.id}/image` : null
     });
   } catch (err) {
     req.log.error(err);
