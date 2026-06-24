@@ -203,10 +203,27 @@ function DeleteDialog({
   );
 }
 
+const getClassRank = (name: string): number => {
+  const n = name.toLowerCase().trim();
+  if (n.includes("play") || n.includes("pg")) return 1;
+  if (n.includes("nursery") || n.includes("nur")) return 2;
+  if (n.includes("prep")) return 3;
+  
+  const match = n.match(/\d+/);
+  if (match) {
+    return 3 + parseInt(match[0], 10);
+  }
+  return 100;
+};
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function FeeStructure() {
   const { toast } = useToast();
   const { data: classes, isLoading: classesLoading } = useListClasses();
+  
+  const sortedClasses = classes
+    ? [...classes].sort((a, b) => getClassRank(a.name) - getClassRank(b.name))
+    : [];
 
   const [feesMap,       setFeesMap]       = useState<FeesMap>({});
   const [loadingFees,   setLoadingFees]   = useState(true);
@@ -403,7 +420,7 @@ export default function FeeStructure() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(classes ?? []).map((cls, idx) => {
+                  {sortedClasses.map((cls, idx) => {
                     const fees       = feesMap[cls.id];
                     const configured = fees && fees.monthly > 0;
                     return (

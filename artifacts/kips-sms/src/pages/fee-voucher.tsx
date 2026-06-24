@@ -207,6 +207,19 @@ function VoucherCopy({
   );
 }
 
+const getClassRank = (name: string): number => {
+  const n = name.toLowerCase().trim();
+  if (n.includes("play") || n.includes("pg")) return 1;
+  if (n.includes("nursery") || n.includes("nur")) return 2;
+  if (n.includes("prep")) return 3;
+  
+  const match = n.match(/\d+/);
+  if (match) {
+    return 3 + parseInt(match[0], 10);
+  }
+  return 100;
+};
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function FeeVoucher() {
   const [selectedClass, setSelectedClass] = useState("");
@@ -252,6 +265,10 @@ export default function FeeVoucher() {
   const { data: classes }     = useListClasses();
   const { data: allStudents } = useListStudents({});
   const { toast } = useToast();
+
+  const sortedClasses = classes
+    ? [...classes].sort((a, b) => getClassRank(a.name) - getClassRank(b.name))
+    : [];
 
   // Inject print CSS
   useEffect(() => {
@@ -534,7 +551,7 @@ export default function FeeVoucher() {
               <Select value={selectedClass} onValueChange={v => { setSelectedClass(v); setGenerated(false); setEdits({}); setSaved(false); setExistingForMonth([]); }}>
                 <SelectTrigger><SelectValue placeholder="Choose class..." /></SelectTrigger>
                 <SelectContent>
-                  {classes?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                  {sortedClasses.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
