@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useGetFeeDefaulters } from "@workspace/api-client-react";
+import { useGetFeeDefaulters, useListClasses } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Printer, AlertTriangle, MessageCircle, Phone } from "lucide-react";
+import { Printer, AlertTriangle, MessageCircle, Phone, Grid3X3, LayoutList, BookOpen, User } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const PRINT_STYLES = `
   @page { size: A4 portrait; margin: 0; }
@@ -30,6 +31,32 @@ const PRINT_STYLES = `
 `;
 
 const printDate = new Date().toLocaleDateString("en-PK", { day: "numeric", month: "long", year: "numeric" });
+
+// ── Gradient palette & card bg matching students/contacts pages ────────────────
+const GRADIENTS = [
+  "from-violet-500 to-purple-600","from-pink-500 to-rose-500",
+  "from-blue-500 to-indigo-600",  "from-cyan-500 to-blue-500",
+  "from-teal-500 to-emerald-500", "from-green-500 to-teal-600",
+  "from-amber-400 to-orange-500", "from-orange-500 to-red-500",
+  "from-fuchsia-500 to-pink-600", "from-sky-400 to-cyan-500",
+  "from-emerald-500 to-green-600","from-rose-500 to-pink-600",
+  "from-indigo-400 to-violet-500",
+];
+const CARD_BG = [
+  { bg: "#f5f3ff", border: "#ddd6fe", tag: "#7c3aed" },  // violet
+  { bg: "#fff1f2", border: "#fecdd3", tag: "#e11d48" },  // pink
+  { bg: "#eff6ff", border: "#bfdbfe", tag: "#2563eb" },  // blue
+  { bg: "#ecfeff", border: "#a5f3fc", tag: "#0891b2" },  // cyan
+  { bg: "#f0fdf4", border: "#bbf7d0", tag: "#059669" },  // teal
+  { bg: "#f0fdf4", border: "#86efac", tag: "#16a34a" },  // green
+  { bg: "#fffbeb", border: "#fde68a", tag: "#d97706" },  // amber
+  { bg: "#fff7ed", border: "#fed7aa", tag: "#ea580c" },  // orange
+  { bg: "#fdf4ff", border: "#f0abfc", tag: "#c026d3" },  // fuchsia
+  { bg: "#f0f9ff", border: "#bae6fd", tag: "#0284c7" },  // sky
+  { bg: "#ecfdf5", border: "#6ee7b7", tag: "#059669" },  // emerald
+  { bg: "#fff1f2", border: "#fda4af", tag: "#e11d48" },  // rose
+  { bg: "#eef2ff", border: "#c7d2fe", tag: "#4f46e5" },  // indigo
+];
 
 const getCleanMonth = (m: string) => {
   const match = m.match(/\d{4}-\d{2}/);
@@ -79,6 +106,7 @@ interface FeeItem {
   studentId?: number | null;
   studentName?: string | null;
   admissionNumber?: string | null;
+  classId?: number | null;
   className?: string | null;
   month: string;
   amount?: number | null;
@@ -91,7 +119,9 @@ interface FeeItem {
 
 export default function FeeDefaulters() {
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive">("active");
+  const [viewMode, setViewMode] = useState<"card" | "list">("list");
   const { data: defaulters, isLoading } = useGetFeeDefaulters({ status: statusFilter });
+  const { data: classes } = useListClasses();
 
   useEffect(() => {
     const prev = document.getElementById("kips-print-styles"); if (prev) prev.remove();
@@ -101,6 +131,15 @@ export default function FeeDefaulters() {
   }, []);
 
   const rawList      = (defaulters ?? []) as FeeItem[];
+
+  const sortedClasses = classes
+    ? [...classes].sort((a, b) => getClassRank(a.name) - getClassRank(b.name))
+    : [];
+
+  const classColorMap = new Map<number, number>();
+  sortedClasses.forEach((cls, i) => classColorMap.set(cls.id, i % GRADIENTS.length));
+  const getGrad = (cId?: number | null) => cId != null && classColorMap.has(cId) ? GRADIENTS[classColorMap.get(cId)!] : "from-slate-500 to-gray-600";
+  const getCard = (cId?: number | null) => cId != null && classColorMap.has(cId) ? CARD_BG[classColorMap.get(cId)! % CARD_BG.length] : CARD_BG[0];
   
   // Group by student ID to consolidate all fee records across all months
   const groupedMap: Record<string, { first: FeeItem; items: FeeItem[] }> = {};
@@ -151,6 +190,13 @@ export default function FeeDefaulters() {
       notes,
       waNotes,
     } as unknown as FeeItem;
+  });
+
+  const sortedList = [...list].sort((a, b) => {
+    const rankA = getClassRank(a.className || "");
+    const rankB = getClassRank(b.className || "");
+    if (rankA !== rankB) return rankA - rankB;
+    return (a.studentName || "").localeCompare(b.studentName || "");
   });
 
   const totalPending = list.reduce((s, f) => s + (f.amount ?? 0), 0);
@@ -259,9 +305,31 @@ export default function FeeDefaulters() {
             </h1>
             <p className="text-gray-500 text-sm mt-1">Students with unpaid / overdue fees</p>
           </div>
-          <Button variant="outline" onClick={() => window.print()}>
-            <Printer className="w-4 h-4 mr-2" /> Print Report
-          </Button>
+          <div className="flex gap-2 no-print">
+            <div className="flex border rounded-lg overflow-hidden bg-white shadow-sm">
+              <button
+                onClick={() => setViewMode("card")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors",
+                  viewMode === "card" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                <Grid3X3 className="w-3.5 h-3.5" /> Cards
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold transition-colors border-l",
+                  viewMode === "list" ? "bg-red-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                <LayoutList className="w-3.5 h-3.5" /> List
+              </button>
+            </div>
+            <Button variant="outline" onClick={() => window.print()}>
+              <Printer className="w-4 h-4 mr-2" /> Print Report
+            </Button>
+          </div>
         </div>
 
         {/* Status Filter */}
@@ -305,76 +373,198 @@ export default function FeeDefaulters() {
           </div>
         )}
 
-        {/* Table */}
-        <Card className="no-print">
-          <CardContent className="p-0">
-            {isLoading ? (
-              <div className="p-6 space-y-3">{[1,2,3].map(i=><Skeleton key={i} className="h-12 w-full"/>)}</div>
-            ) : list.length === 0 ? (
-              <div className="text-center py-16">
-                <p className="text-lg font-bold text-emerald-600">✓ No Defaulters!</p>
-                <p className="text-sm text-gray-400 mt-1">Sab fees clear hain</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {classNames.map(cls => (
-                  <div key={cls}>
-                    {/* Class header */}
-                    <div className="px-4 py-2.5 bg-gradient-to-r from-blue-700 to-indigo-700 flex items-center justify-between">
-                      <span className="text-sm font-bold text-white">{cls}</span>
-                      <span className="text-xs text-white/80">
-                        {byClass[cls].length} student{byClass[cls].length!==1?"s":""} &nbsp;|&nbsp;
-                        PKR {byClass[cls].reduce((s,f)=>s+(f.amount??0)+(f.fine??0),0).toLocaleString()}
-                      </span>
+        {isLoading ? (
+          viewMode === "card" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 no-print">
+              {[1, 2, 3, 4, 5, 6].map(i => (
+                <Skeleton key={i} className="h-56 rounded-2xl" />
+              ))}
+            </div>
+          ) : (
+            <Card className="no-print overflow-hidden shadow-sm border">
+              <CardContent className="p-6 space-y-3">
+                {[1, 2, 3].map(i => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </CardContent>
+            </Card>
+          )
+        ) : sortedList.length === 0 ? (
+          <div className="text-center py-16 no-print">
+            <p className="text-lg font-bold text-emerald-600">✓ No Defaulters!</p>
+            <p className="text-sm text-gray-400 mt-1">Sab fees clear hain</p>
+          </div>
+        ) : viewMode === "card" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 no-print">
+            {sortedList.map(fee => {
+              const classId = fee.classId;
+              const card = getCard(classId);
+              const grad = getGrad(classId);
+              const total = (fee.amount ?? 0) + (fee.fine ?? 0);
+              const waMsg = buildWhatsAppMsg(fee.studentName ?? "Student", fee.className ?? "", fee.month, total, fee.dueDate ?? "", fee.waNotes || "", fee.phone);
+              const hasPhone = !!(fee.phone?.trim());
+
+              return (
+                <div
+                  key={fee.id}
+                  className="rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-200 border flex flex-col"
+                  style={{ background: card.bg, borderColor: card.border }}
+                >
+                  <div className={`h-1.5 w-full bg-gradient-to-r ${grad}`} />
+                  <div className="p-4 flex flex-col gap-3 flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-[52px] h-[52px] rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center shadow-sm shrink-0 border-2 border-white/80 overflow-hidden text-white font-extrabold text-xl`}>
+                        {fee.studentName?.charAt(0) || "S"}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-gray-900 truncate text-[15px] leading-tight">{fee.studentName}</h3>
+                        {fee.fatherName && <p className="text-xs text-gray-550 truncate mt-0.5">s/o {fee.fatherName}</p>}
+                        <p className="text-[11px] font-mono mt-0.5 font-semibold" style={{ color: card.tag }}>{fee.admissionNumber}</p>
+                      </div>
                     </div>
 
-                    {/* Students in class */}
-                    <div className="divide-y">
-                      {byClass[cls].map((fee, i) => {
-                        const total    = (fee.amount ?? 0) + (fee.fine ?? 0);
-                        const waMsg    = buildWhatsAppMsg(fee.studentName ?? "Student", fee.className ?? "", fee.month, total, fee.dueDate ?? "", fee.waNotes || "", fee.phone);
-                        const hasPhone = !!(fee.phone?.trim());
+                    {fee.className && (
+                      <div>
+                        <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-gradient-to-r ${grad} text-white shadow-sm`}>
+                          <BookOpen className="w-3 h-3" />
+                          {fee.className}
+                        </span>
+                      </div>
+                    )}
 
-                        return (
-                          <div key={fee.id} className={`flex items-center gap-4 px-4 py-3 hover:bg-red-50/40 transition-colors ${i%2===0?"bg-white":"bg-red-50/20"}`}>
-                            {/* Info */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className="font-semibold text-gray-900">{fee.studentName || "—"}</p>
-                                <span className="font-mono text-[11px] text-purple-600 font-bold">{fee.admissionNumber || "—"}</span>
-                              </div>
-                              <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500 flex-wrap">
-                                <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">{fee.className}</span>
-                                <span>{fee.month}</span>
-                                <span>Due: <strong className="text-red-600">{fee.dueDate}</strong></span>
-                                {hasPhone && (
-                                  <span className="flex items-center gap-1 text-gray-400">
-                                    <Phone className="w-3 h-3" />{fee.phone}
-                                  </span>
-                                )}
-                              </div>
+                    <div className="space-y-2 text-sm flex-1">
+                      <div className="rounded-lg px-3 py-2 text-xs text-gray-655 leading-relaxed" style={{ background: "rgba(255,255,255,0.7)", border: `1px solid ${card.border}` }}>
+                        <div className="font-bold text-gray-700 mb-1">Unpaid Month(s): {fee.month}</div>
+                        {fee.notes && <div className="italic text-gray-500 font-medium">{fee.notes}</div>}
+                      </div>
+
+                      <div className="flex items-center justify-between rounded-lg px-3 py-2 text-xs" style={{ background: "rgba(255,255,255,0.7)", border: `1px solid ${card.border}` }}>
+                        <div>
+                          <div className="text-gray-500">Amount Due</div>
+                          <div className="font-extrabold text-[15px] text-red-600">PKR {total.toLocaleString()}</div>
+                        </div>
+                        {(fee.fine ?? 0) > 0 && (
+                          <div className="text-right">
+                            <div className="text-gray-500">Late Fine</div>
+                            <div className="font-bold text-orange-600">PKR {(fee.fine ?? 0).toLocaleString()}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-col gap-1 text-[11px] text-gray-500 mt-1">
+                        {fee.dueDate && (
+                          <div className="flex items-center gap-1">
+                            <span className="font-semibold text-gray-600">Due Date:</span>
+                            <span className="text-gray-800 font-bold">{fee.dueDate}</span>
+                          </div>
+                        )}
+                        {fee.phone && (
+                          <div className="flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-gray-400" />
+                            <span className="text-gray-700">{fee.phone}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-2 pt-2 border-t border-gray-100/50 flex justify-end">
+                      <a
+                        href={waMsg}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={cn(
+                          "flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all border w-full text-center shadow-sm",
+                          hasPhone
+                            ? "bg-green-500 hover:bg-green-600 text-white border-green-600"
+                            : "bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+                        )}
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        {hasPhone ? "Send WhatsApp" : "Send WA Message"}
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <Card className="no-print overflow-hidden shadow-sm border">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[900px]">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-red-600 to-rose-700 text-white">
+                      {["#", "Adm #", "Student Name", "Class", "Month(s)", "Amount Due", "Fine", "Due Date", "Phone", "Action"].map(h => (
+                        <th key={h} className="text-left py-3 px-3 font-semibold text-xs uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedList.map((fee, i) => {
+                      const total    = (fee.amount ?? 0) + (fee.fine ?? 0);
+                      const waMsg    = buildWhatsAppMsg(fee.studentName ?? "Student", fee.className ?? "", fee.month, total, fee.dueDate ?? "", fee.waNotes || "", fee.phone);
+                      const hasPhone = !!(fee.phone?.trim());
+
+                      return (
+                        <tr key={fee.id} className={`border-b hover:bg-red-50/20 transition-colors ${i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                          <td className="py-3.5 px-3 text-gray-400 text-xs font-medium">{i+1}</td>
+                          
+                          <td className="py-3.5 px-3 font-mono text-[11px] font-bold text-purple-600 whitespace-nowrap">
+                            {fee.admissionNumber || "—"}
+                          </td>
+                          
+                          <td className="py-3.5 px-3">
+                            <div>
+                              <p className="font-semibold text-gray-900 text-sm whitespace-nowrap">{fee.studentName || "—"}</p>
                               {fee.notes && (
-                                <p className="text-[10px] text-gray-400 font-normal mt-1 italic">
-                                  Breakdown: {fee.notes}
+                                <p className="text-[10px] text-gray-400 mt-0.5 max-w-[280px] leading-tight font-normal italic">
+                                  {fee.notes}
                                 </p>
                               )}
                             </div>
-
-                            {/* Amount */}
-                            <div className="text-right shrink-0">
-                              <p className="text-lg font-black text-red-600">PKR {total.toLocaleString()}</p>
-                              {(fee.fine ?? 0) > 0 && (
-                                <p className="text-[10px] text-orange-500">incl. PKR {(fee.fine??0).toLocaleString()} fine</p>
-                              )}
-                            </div>
-
-                            {/* WhatsApp button */}
+                          </td>
+                          
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <span className="inline-flex items-center text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                              {fee.className}
+                            </span>
+                          </td>
+                          
+                          <td className="py-3.5 px-3 text-gray-600 text-xs font-medium whitespace-nowrap">
+                            {fee.month}
+                          </td>
+                          
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            <p className="font-bold text-red-600 text-sm">PKR {total.toLocaleString()}</p>
+                          </td>
+                          
+                          <td className="py-3.5 px-3 text-orange-600 text-xs font-semibold whitespace-nowrap">
+                            {(fee.fine ?? 0) > 0 ? `PKR ${(fee.fine??0).toLocaleString()}` : "—"}
+                          </td>
+                          
+                          <td className="py-3.5 px-3 text-gray-700 font-semibold whitespace-nowrap">
+                            {fee.dueDate}
+                          </td>
+                          
+                          <td className="py-3.5 px-3 whitespace-nowrap">
+                            {hasPhone ? (
+                              <div className="flex items-center gap-1 text-gray-700 text-xs font-medium">
+                                <Phone className="w-3.5 h-3.5 text-gray-400" />
+                                {fee.phone}
+                              </div>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
+                          </td>
+                          
+                          <td className="py-3.5 px-3 whitespace-nowrap">
                             <a
                               href={waMsg}
                               target="_blank"
                               rel="noopener noreferrer"
                               title={hasPhone ? `Send reminder to ${fee.phone}` : "Send reminder (no phone — opens WA manually)"}
-                              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
                                 hasPhone
                                   ? "bg-green-500 hover:bg-green-600 text-white border-green-600 shadow-sm"
                                   : "bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
@@ -383,29 +573,29 @@ export default function FeeDefaulters() {
                               <MessageCircle className="w-3.5 h-3.5" />
                               {hasPhone ? "WhatsApp" : "WA Msg"}
                             </a>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Class subtotal */}
-                    <div className="px-4 py-2 bg-red-50 flex justify-between text-xs font-semibold text-red-800 border-t border-red-100">
-                      <span>Class Total — {byClass[cls].length} students</span>
-                      <span>PKR {byClass[cls].reduce((s,f)=>s+(f.amount??0)+(f.fine??0),0).toLocaleString()}</span>
-                    </div>
-                  </div>
-                ))}
-
-                {/* Grand total */}
-                <div className="px-4 py-3 bg-gray-900 flex items-center justify-between">
-                  <span className="text-sm font-bold text-white">Grand Total — {list.length} students</span>
-                  <span className="text-base font-black text-red-300">PKR {grandTotal.toLocaleString()}</span>
-                </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-red-50/50 border-t-2 border-red-200">
+                      <td colSpan={5} className="py-3 px-3 text-xs font-bold text-red-800">
+                        Total Pending: {sortedList.length} student{sortedList.length !== 1 ? "s" : ""}
+                      </td>
+                      <td colSpan={5} className="py-3 px-3 text-right">
+                        <span className="text-xs font-bold text-red-800 mr-2">Grand Total:</span>
+                        <span className="text-base font-black text-red-600">PKR {grandTotal.toLocaleString()}</span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </>
   );
 }
+

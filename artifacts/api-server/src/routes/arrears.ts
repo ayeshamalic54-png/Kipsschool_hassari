@@ -69,28 +69,55 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const today = new Date().toISOString().split("T")[0];
 
-    // Get all unpaid/partial fees
     const fees = await db
-      .select()
+      .select({
+        id: feesTable.id,
+        studentId: feesTable.studentId,
+        month: feesTable.month,
+        amount: feesTable.amount,
+        paidAmount: feesTable.paidAmount,
+        fine: feesTable.fine,
+        discount: feesTable.discount,
+        dueDate: feesTable.dueDate,
+        notes: feesTable.notes,
+        status: feesTable.status,
+        studentName: studentsTable.name,
+        admissionNumber: studentsTable.admissionNumber,
+        fatherName: studentsTable.fatherName,
+        classId: studentsTable.classId,
+        studentStatus: studentsTable.status,
+        className: classesTable.name,
+      })
       .from(feesTable)
+      .innerJoin(studentsTable, eq(feesTable.studentId, studentsTable.id))
+      .leftJoin(classesTable, eq(studentsTable.classId, classesTable.id))
       .where(
         and(
           lt(feesTable.dueDate, today),
+          eq(studentsTable.status, "active")
         )
       );
 
-    // Filter unpaid or partial in memory (status enum may vary)
     const overdue = fees.filter(
       f => f.status === "unpaid" || f.status === "partial"
     );
 
-    const result = await Promise.all(
-      overdue.map(f => enrichFee(f as unknown as Record<string, unknown>))
-    );
+    const result = overdue.map(f => {
+      const amount = Number(f.amount ?? 0);
+      const paidAmount = Number(f.paidAmount ?? 0);
+      const fine = Number(f.fine ?? 0);
+      const discount = Number(f.discount ?? 0);
+      return {
+        ...f,
+        amount,
+        paidAmount,
+        fine,
+        discount,
+        remainingAmount: Math.max(0, amount + fine - discount - paidAmount),
+      };
+    });
 
-    const filtered = result.filter(f => f && f.studentStatus === "active");
-
-    res.json(filtered);
+    res.json(result);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });

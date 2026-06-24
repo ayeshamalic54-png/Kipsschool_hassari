@@ -245,6 +245,9 @@ export default function FeeVoucher() {
     admission: false,
   });
 
+  const feeStructureMap   = Object.fromEntries(feeStructures.map(f => [f.classId, f]));
+  const selectedStructure = selectedClass ? feeStructureMap[Number(selectedClass)] : undefined;
+
   useEffect(() => {
     if (selectedStructure) {
       setSelectedFees({
@@ -326,10 +329,8 @@ export default function FeeVoucher() {
 
   useEffect(() => { loadFeeRecords(); }, [loadFeeRecords]);
 
-  const feeStructureMap   = Object.fromEntries(feeStructures.map(f => [f.classId, f]));
   const classStudents     = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
   const selectedClassName = classes?.find(c => String(c.id) === selectedClass)?.name ?? "";
-  const selectedStructure = selectedClass ? feeStructureMap[Number(selectedClass)] : undefined;
   const monthLabel        = month ? new Date(month + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" }) : "";
 
   const getEdit = (id: number): VoucherEdit =>

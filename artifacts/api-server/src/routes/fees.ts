@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { feesTable, studentsTable, classesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "../lib/auth";
 import type { Request } from "express";
 
@@ -72,12 +72,66 @@ router.get("/", requireAuth, async (req, res) => {
     if (status) conditions.push(eq(feesTable.status, String(status) as "paid" | "unpaid" | "partial"));
     if (month) conditions.push(eq(feesTable.month, String(month)));
 
-    const query = db.select().from(feesTable);
+    const query = db
+      .select({
+        id: feesTable.id,
+        studentId: feesTable.studentId,
+        amount: feesTable.amount,
+        paidAmount: feesTable.paidAmount,
+        month: feesTable.month,
+        dueDate: feesTable.dueDate,
+        paidDate: feesTable.paidDate,
+        status: feesTable.status,
+        fine: feesTable.fine,
+        discount: feesTable.discount,
+        notes: feesTable.notes,
+        tuitionFee: feesTable.tuitionFee,
+        examFee: feesTable.examFee,
+        annualFee: feesTable.annualFee,
+        transportFee: feesTable.transportFee,
+        arrears: feesTable.arrears,
+        studentName: studentsTable.name,
+        admissionNumber: studentsTable.admissionNumber,
+        fatherName: studentsTable.fatherName,
+        classId: studentsTable.classId,
+        studentStatus: studentsTable.status,
+        className: classesTable.name,
+      })
+      .from(feesTable)
+      .leftJoin(studentsTable, eq(feesTable.studentId, studentsTable.id))
+      .leftJoin(classesTable, eq(studentsTable.classId, classesTable.id));
+
     const fees = conditions.length > 0
       ? await query.where(and(...conditions))
       : await query;
-    const result = await Promise.all(fees.map(f => enrichFee(f as unknown as Record<string, unknown>)));
-    res.json(result.filter(Boolean));
+
+    const result = fees.map(f => {
+      if (!f.studentName) return null; // skip orphans
+      const amount = Number(f.amount ?? 0);
+      const paidAmount = Number(f.paidAmount ?? 0);
+      const fine = Number(f.fine ?? 0);
+      const discount = Number(f.discount ?? 0);
+      const tuitionFee = Number(f.tuitionFee ?? 0);
+      const examFee = Number(f.examFee ?? 0);
+      const annualFee = Number(f.annualFee ?? 0);
+      const transportFee = Number(f.transportFee ?? 0);
+      const arrears = Number(f.arrears ?? 0);
+      return {
+        ...f,
+        amount,
+        paidAmount,
+        fine,
+        discount,
+        tuitionFee,
+        examFee,
+        annualFee,
+        transportFee,
+        arrears,
+        remainingAmount: Math.max(0, amount + fine - discount - paidAmount),
+      };
+    }).filter(Boolean);
+
+    res.json(result);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
@@ -179,11 +233,54 @@ router.post("/:id/pay", requireAuth, async (req, res) => {
 router.get("/defaulters", requireAuth, async (req, res) => {
   try {
     const { status } = req.query; // 'active' or 'inactive'
-    const fees = await db.select().from(feesTable).where(eq(feesTable.status, "unpaid"));
-    const result = await Promise.all(fees.map(f => enrichFee(f as unknown as Record<string, unknown>)));
     const targetStatus = status === "inactive" ? ["inactive", "left"] : ["active"];
-    const filtered = result.filter(f => f && targetStatus.includes(f.studentStatus));
-    res.json(filtered);
+
+    const defaulters = await db
+      .select({
+        id: feesTable.id,
+        studentId: feesTable.studentId,
+        month: feesTable.month,
+        amount: feesTable.amount,
+        paidAmount: feesTable.paidAmount,
+        fine: feesTable.fine,
+        discount: feesTable.discount,
+        dueDate: feesTable.dueDate,
+        notes: feesTable.notes,
+        studentName: studentsTable.name,
+        admissionNumber: studentsTable.admissionNumber,
+        fatherName: studentsTable.fatherName,
+        classId: studentsTable.classId,
+        studentStatus: studentsTable.status,
+        phone: studentsTable.phone,
+        className: classesTable.name,
+      })
+      .from(feesTable)
+      .innerJoin(studentsTable, eq(feesTable.studentId, studentsTable.id))
+      .leftJoin(classesTable, eq(studentsTable.classId, classesTable.id))
+      .where(
+        and(
+          eq(feesTable.status, "unpaid"),
+          inArray(studentsTable.status, targetStatus)
+        )
+      );
+
+    const result = defaulters.map(f => {
+      const amount = Number(f.amount ?? 0);
+      const paidAmount = Number(f.paidAmount ?? 0);
+      const fine = Number(f.fine ?? 0);
+      const discount = Number(f.discount ?? 0);
+      return {
+        ...f,
+        amount,
+        paidAmount,
+        fine,
+        discount,
+        remainingAmount: Math.max(0, amount + fine - discount - paidAmount),
+        phone: f.phone ?? null,
+      };
+    });
+
+    res.json(result);
   } catch (err) {
     req.log.error(err);
     res.status(500).json({ error: "Internal server error" });
