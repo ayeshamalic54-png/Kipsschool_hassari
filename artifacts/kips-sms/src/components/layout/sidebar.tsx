@@ -8,6 +8,7 @@ import {
   ReceiptText, ClipboardList, Settings, LayoutList, PhoneCall,
 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -41,6 +42,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const [location] = useLocation();
   const { user, logout } = useAuthStore();
   const schoolInfo = useSchoolInfo();
+  const queryClient = useQueryClient();
   const navigation = getNavigation(user?.role);
 
   return (
@@ -113,7 +115,10 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           </div>
         </div>
         <button
-          onClick={() => logout()}
+          onClick={() => {
+            queryClient.clear();
+            logout();
+          }}
           className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-red-600 rounded-lg hover:bg-red-50 transition-colors"
         >
           <LogOut className="w-4 h-4" />

@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useSchoolInfo } from "@/lib/school-info";
 import { useLogin } from "@workspace/api-client-react";
 import { useAuthStore } from "@/lib/auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ export default function Login() {
   const { toast } = useToast();
   const loginMutation = useLogin();
   const schoolInfo = useSchoolInfo();
+  const queryClient = useQueryClient();
 
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -32,6 +34,7 @@ export default function Login() {
   const onSubmit = (values: z.infer<typeof loginSchema>) => {
     loginMutation.mutate({ data: values }, {
       onSuccess: (data) => {
+        queryClient.clear();
         login(data.user, data.token);
         setLocation("/dashboard");
         toast({ title: "Welcome back!", description: `Logged in as ${data.user.name}` });
