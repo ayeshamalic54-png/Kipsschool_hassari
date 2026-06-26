@@ -1,0 +1,31 @@
+name: Trigger Auto Daily Backup
+
+on:
+  schedule:
+    # 12:35 AM Pakistan Time (PKT) is 7:35 PM UTC (19:35)
+    - cron: '35 19 * * *'
+    # Also run at 10:00 AM PKT (5:00 AM UTC) and 3:00 PM PKT (10:00 AM UTC) to keep backups robust
+    - cron: '0 5 * * *'
+    - cron: '0 10 * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  trigger-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Backup Endpoint
+        run: |
+          APP_URL="${{ secrets.APP_URL }}"
+          if [ -z "$APP_URL" ]; then
+            # Default fallback guess based on repository naming
+            APP_URL="https://kipsschool-hassari.onrender.com"
+            echo "Warning: APP_URL secret is not configured in repository settings. Falling back to default guess: $APP_URL"
+          fi
+          
+          # Trim trailing slash if present
+          APP_URL=$(echo "$APP_URL" | sed 's/\/$//')
+          
+          echo "Triggering backup at: $APP_URL/api/admin/auto-backup/trigger"
+          
+          # Call the backup trigger endpoint with curl. If it fails (e.g. 4xx/5xx), curl exits with an error code.
+          curl -f -s -S -X GET "$APP_URL/api/admin/auto-backup/trigger?key=Lb6627pOzvpNud6bBXq/eFYL8LRfLRQFNMF1Py2LKec="
