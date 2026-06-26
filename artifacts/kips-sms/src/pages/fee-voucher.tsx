@@ -275,6 +275,10 @@ export default function FeeVoucher() {
     admission: false,
   });
 
+  const { data: classes }     = useListClasses();
+  const { data: allStudents } = useListStudents({});
+  const { toast } = useToast();
+
   const feeStructureMap   = Object.fromEntries(feeStructures.map(f => [f.classId, f]));
   const selectedStructure = selectedClass ? feeStructureMap[Number(selectedClass)] : undefined;
   const classStudents     = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
@@ -309,9 +313,7 @@ export default function FeeVoucher() {
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);
   const [checkingDuplicate,   setCheckingDuplicate]   = useState(false);
 
-  const { data: classes }     = useListClasses();
-  const { data: allStudents } = useListStudents({});
-  const { toast } = useToast();
+
 
   const sortedClasses = classes
     ? [...classes].sort((a, b) => getClassRank(a.name) - getClassRank(b.name))
