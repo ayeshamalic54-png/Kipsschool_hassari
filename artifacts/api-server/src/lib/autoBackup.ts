@@ -178,6 +178,10 @@ export function startAutoBackupScheduler() {
   // Temporary schedule for testing at 12:35 AM PKT
   cron.schedule("35 0 * * *", runAutoBackup, { timezone: "Asia/Karachi" });
   
+  // Temporary schedules for user checking at 1:55 AM and 2:00 AM PKT
+  cron.schedule("55 1 * * *", runAutoBackup, { timezone: "Asia/Karachi" });
+  cron.schedule("0 2 * * *", runAutoBackup, { timezone: "Asia/Karachi" });
+  
   logger.info("Auto daily backup scheduler started (runs at 10:00 AM and 3:00 PM PKT)");
 }
 

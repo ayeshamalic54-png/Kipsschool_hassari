@@ -4,9 +4,12 @@ on:
   schedule:
     # 12:35 AM Pakistan Time (PKT) is 7:35 PM UTC (19:35)
     - cron: '35 19 * * *'
-    # Also run at 10:00 AM PKT (5:00 AM UTC) and 3:00 PM PKT (10:00 AM UTC) to keep backups robust
+    # Also run at 10:00 AM PKT (5:00 AM UTC) and 3:00 PM PKT (10:00 AM UTC)
     - cron: '0 5 * * *'
     - cron: '0 10 * * *'
+    # Temporary check times: 1:55 AM PKT (20:55 UTC) and 2:00 AM PKT (21:00 UTC)
+    - cron: '55 20 * * *'
+    - cron: '0 21 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab
 
 jobs:
@@ -27,5 +30,5 @@ jobs:
           
           echo "Triggering backup at: $APP_URL/api/admin/auto-backup/trigger"
           
-          # Call the backup trigger endpoint with curl. If it fails (e.g. 4xx/5xx), curl exits with an error code.
+          # Call the backup trigger endpoint with curl.
           curl -f -s -S -X GET "$APP_URL/api/admin/auto-backup/trigger?key=Lb6627pOzvpNud6bBXq/eFYL8LRfLRQFNMF1Py2LKec="
