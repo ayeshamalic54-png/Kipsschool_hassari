@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { staffTable, usersTable } from "@workspace/db";
 import { eq, isNull } from "drizzle-orm";
 import { requireAuth, hashPassword } from "../lib/auth";
+import { compressImageIfBase64 } from "../lib/image";
 
 const router = Router();
 
@@ -78,6 +79,9 @@ router.post("/fix-logins", requireAuth, async (req, res) => {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const data = req.body;
+    if (data && data.imageUrl) {
+      data.imageUrl = await compressImageIfBase64(data.imageUrl);
+    }
     const username = data.name.toLowerCase().replace(/\s+/g, ".") + ".staff";
     const [staff] = await db.insert(staffTable).values({ ...data, username, status: data.status || "active" }).returning();
 
@@ -93,7 +97,11 @@ router.post("/", requireAuth, async (req, res) => {
 // PATCH /api/staff/:id
 router.patch("/:id", requireAuth, async (req, res) => {
   try {
-    const [updated] = await db.update(staffTable).set({ ...req.body, updatedAt: new Date() }).where(eq(staffTable.id, Number(req.params.id))).returning();
+    const updates = { ...req.body };
+    if (updates.imageUrl) {
+      updates.imageUrl = await compressImageIfBase64(updates.imageUrl);
+    }
+    const [updated] = await db.update(staffTable).set({ ...updates, updatedAt: new Date() }).where(eq(staffTable.id, Number(req.params.id))).returning();
     if (!updated) {
       res.status(404).json({ error: "Staff not found" });
       return;
@@ -111,7 +119,11 @@ router.put("/:id", requireAuth, async (req, res) => {
     const staffId = Number(req.params.id);
     const [existing] = await db.select().from(staffTable).where(eq(staffTable.id, staffId));
     if (!existing) { res.status(404).json({ error: "Staff not found" }); return; }
-    const [updated] = await db.update(staffTable).set({ ...req.body, updatedAt: new Date() }).where(eq(staffTable.id, staffId)).returning();
+    const updates = { ...req.body };
+    if (updates.imageUrl) {
+      updates.imageUrl = await compressImageIfBase64(updates.imageUrl);
+    }
+    const [updated] = await db.update(staffTable).set({ ...updates, updatedAt: new Date() }).where(eq(staffTable.id, staffId)).returning();
     res.json({ ...updated, salary: updated.salary ? Number(updated.salary) : null });
   } catch (err) {
     req.log.error(err);

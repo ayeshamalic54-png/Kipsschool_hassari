@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Plus, Loader2, CheckCircle, Clock, AlertCircle,
   Printer, Pencil, Trash2, Grid3X3, LayoutList,
-  CreditCard, TrendingUp, TrendingDown, DollarSign, Search,
+  CreditCard, TrendingUp, TrendingDown, DollarSign, Search, MessageCircle
 } from "lucide-react";
 import { useAuthStore } from "@/lib/auth";
 import { useSchoolInfo } from "@/lib/school-info";
@@ -435,6 +435,24 @@ export default function Fees() {
     w.document.close();
   };
 
+  const sendReceiptWhatsApp = () => {
+    if (!receipt) return;
+    const stu = students?.find(s => s.admissionNumber === receipt.admissionNumber);
+    const phone = stu?.phone ?? "";
+    const cleanNotes = receipt.month ? formatCleanMonth(getCleanMonth(receipt.month)) : "";
+    const msg = `السلام علیکم! 🌟\n\nکیپس سکول ہساری کی طرف سے فیس وصولی کی رسید:\n\nبچہ/بچی: *${receipt.studentName}*\nکلاس: ${receipt.className}\nفیس کا مہینہ: *${cleanNotes}*\nوصول شدہ رقم: *PKR ${receipt.amountPaid.toLocaleString()}*\n\n${receipt.remaining > 0 ? `بقایا رقم: *PKR ${receipt.remaining.toLocaleString()}*` : "رسید کا سٹیٹس: *مکمل فیس ادا کر دی گئی ہے*"}\nرسید نمبر: ${receipt.receiptNo}\nوصولی کی تاریخ: ${receipt.paidDate}\n\nفیس کی بروقت ادائیگی کا شکریہ! 🙏\nکیپس سکول ہساری`;
+
+    const encoded = encodeURIComponent(msg);
+    const cleanPhone = phone.replace(/\D/g, "");
+    const intlPhone = cleanPhone.startsWith("0") ? "92" + cleanPhone.slice(1) : cleanPhone.startsWith("92") ? cleanPhone : "92" + cleanPhone;
+    
+    const waUrl = intlPhone.length > 4
+      ? `https://wa.me/${intlPhone}?text=${encoded}`
+      : `https://wa.me/?text=${encoded}`;
+      
+    window.open(waUrl, "_blank");
+  };
+
   // ── Sorted classes for add dialog ─────────────────────────────────────────
   const sortedClasses = classes ? [...classes].sort((a,b)=>{ const na=parseInt(a.name)||0, nb=parseInt(b.name)||0; return na&&nb?na-nb:a.name.localeCompare(b.name); }) : [];
   const classStudents = selClassId ? (students??[]).filter(s=>Number(s.classId)===Number(selClassId)).sort((a,b)=>(a.admissionNumber??"").localeCompare(b.admissionNumber??"",undefined,{numeric:true})) : [];
@@ -818,9 +836,10 @@ export default function Fees() {
                 <p className="text-xs text-gray-500 mt-1">{receipt.month} · {receipt.className}</p>
                 {receipt.remaining>0 && <p className="text-red-500 text-xs font-semibold mt-1">Remaining: PKR {receipt.remaining.toLocaleString()}</p>}
               </div>
-              <div className="flex gap-2">
-                <Button className="flex-1" onClick={printReceipt}><Printer className="w-4 h-4 mr-2"/>Print Receipt</Button>
-                <Button variant="outline" onClick={()=>setReceipt(null)}>Close</Button>
+              <div className="flex flex-col gap-2 pt-1">
+                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={printReceipt}><Printer className="w-4 h-4 mr-2"/>Print Receipt</Button>
+                <Button className="w-full bg-green-600 hover:bg-green-700 text-white font-bold flex items-center justify-center gap-2" onClick={sendReceiptWhatsApp}><MessageCircle className="w-4 h-4"/>Send via WhatsApp</Button>
+                <Button variant="outline" className="w-full" onClick={()=>setReceipt(null)}>Close</Button>
               </div>
             </div>
           )}

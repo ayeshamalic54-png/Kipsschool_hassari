@@ -5,13 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   ReceiptText, Printer, Pencil, Check, GraduationCap,
-  Save, Loader2, CheckCircle2, AlertTriangle, Trash2,
+  Save, Loader2, CheckCircle2, AlertTriangle, Trash2, MessageCircle,
+  Play, Square, Wifi, WifiOff, RefreshCw
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { Textarea } from "@/components/ui/textarea";
 
 // ── Print CSS ─────────────────────────────────────────────────────────────────
 const PRINT_STYLES = `
@@ -220,9 +223,36 @@ const getClassRank = (name: string): number => {
   return 100;
 };
 
+const getVoucherEnglishTemplate = (studentName: string, className: string, month: string, amount: number, dueDate: string) => {
+  return `Assalam u Alaikum! 🌟\n\nKIPS School Hassari has generated a fee voucher for your child *${studentName}* (Class: ${className}) for the month of *${month}*.\n\n💵 Total Payable: *PKR ${amount.toLocaleString()}*\n📅 Due Date: *${dueDate}*\n\nKindly make the payment before the due date to avoid a late fine. Thank you! 🙏\nKIPS School Hassari`;
+};
+
+const getVoucherUrduTemplate = (studentName: string, className: string, month: string, amount: number, dueDate: string) => {
+  return `السلام علیکم! 🌟\n\nکیپس سکول ہساری کی طرف سے آپ کے بچے/بچی *${studentName}* (کلاس: ${className}) کا ماہ *${month}* کا فیس واؤچر تیار کر دیا گیا ہے۔\n\n💵 کل قابلِ ادا رقم: *PKR ${amount.toLocaleString()}*\n📅 آخری تاریخ: *${dueDate}*\n\nبرائے مہربانی جرمانے سے بچنے کے لیے فیس آخری تاریخ سے پہلے جمع کروائیں۔\n\nشکریہ! 🙏\nکیپس سکول ہساری`;
+};
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function FeeVoucher() {
   const [selectedClass, setSelectedClass] = useState("");
+  // WhatsApp post-save states
+  const [showWaPrompt, setShowWaPrompt] = useState(false);
+  const [waQueueOpen, setWaQueueOpen] = useState(false);
+  const [waQueueIndex, setWaQueueIndex] = useState(0);
+  const [waSentIds, setWaSentIds] = useState<Record<number, boolean>>({});
+  const [waLanguage, setWaLanguage] = useState<"urdu" | "english">("urdu");
+  const [waMessageText, setWaMessageText] = useState("");
+  
+  // WhatsApp automatic sending states
+  const [waStatus, setWaStatus] = useState<"connected" | "connecting" | "disconnected">("disconnected");
+  const [waQr, setWaQr] = useState<string | null>(null);
+  const [sendMode, setSendMode] = useState<"auto" | "manual">("auto");
+  const [autoProgress, setAutoProgress] = useState<{
+    sending: boolean;
+    total: number;
+    sent: number;
+    failed: number;
+    errors: string[];
+  }>({ sending: false, total: 0, sent: 0, failed: 0, errors: [] });
   const [month,         setMonth]         = useState(new Date().toISOString().slice(0, 7));
   const [dueDate,       setDueDate]       = useState(() => {
     const d = new Date(); d.setDate(10); return d.toISOString().slice(0, 10);
@@ -328,6 +358,115 @@ export default function FeeVoucher() {
   }, []);
 
   useEffect(() => { loadFeeRecords(); }, [loadFeeRecords]);
+
+  // Synchronize WhatsApp message text
+  useEffect(() => {
+    if (waQueueOpen && waQueueIndex < classStudents.length) {
+      const student = classStudents[waQueueIndex];
+      const structure = student.classId ? feeStructureMap[student.classId] : undefined;
+      const total = calcTotal(student.id, structure);
+      
+      const text = waLanguage === "urdu"
+        ? getVoucherUrduTemplate(student.name, selectedClassName, monthLabel, total, dueDate)
+        : getVoucherEnglishTemplate(student.name, selectedClassName, monthLabel, total, dueDate);
+      
+      setWaMessageText(text);
+    }
+  }, [waQueueOpen, waQueueIndex, waLanguage, classStudents, selectedClassName, monthLabel, dueDate]);
+
+  // WhatsApp Status check & updates
+  const checkWhatsAppStatus = async () => {
+    try {
+      const res = await fetch("/api/whatsapp/status", { headers: authH() });
+      if (res.ok) {
+        const data = await res.json() as { status: "connected" | "connecting" | "disconnected"; qr: string | null };
+        setWaStatus(data.status);
+        setWaQr(data.qr);
+        if (data.status === "connected") {
+          setSendMode("auto");
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const triggerConnect = async () => {
+    try {
+      setWaStatus("connecting");
+      await fetch("/api/whatsapp/connect", { method: "POST", headers: authH() });
+      checkWhatsAppStatus();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const triggerDisconnect = async () => {
+    if (!confirm("Logout from WhatsApp connection?")) return;
+    try {
+      await fetch("/api/whatsapp/disconnect", { method: "POST", headers: authH() });
+      checkWhatsAppStatus();
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleStartAutoSending = async () => {
+    if (waStatus !== "connected") return;
+    
+    const payload = classStudents.map(student => {
+      const structure = student.classId ? feeStructureMap[student.classId] : undefined;
+      const total = calcTotal(student.id, structure);
+      const text = waLanguage === "urdu"
+        ? getVoucherUrduTemplate(student.name, selectedClassName, monthLabel, total, dueDate)
+        : getVoucherEnglishTemplate(student.name, selectedClassName, monthLabel, total, dueDate);
+      
+      return {
+        phone: student.phone ?? "",
+        message: text,
+        studentName: student.name
+      };
+    });
+
+    try {
+      await fetch("/api/whatsapp/send-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authH() },
+        body: JSON.stringify({ messages: payload })
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleStopAutoSending = async () => {
+    try {
+      await fetch("/api/whatsapp/stop-bulk", { method: "POST", headers: authH() });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  // Poll status & bulk progress when bulk sending dialogue is open
+  useEffect(() => {
+    if (!waQueueOpen) return;
+    checkWhatsAppStatus();
+    
+    const interval = setInterval(async () => {
+      await checkWhatsAppStatus();
+      try {
+        const res = await fetch("/api/whatsapp/bulk-progress", { headers: authH() });
+        if (res.ok) {
+          const data = await res.json() as typeof autoProgress;
+          setAutoProgress(data);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [waQueueOpen]);
 
   const classStudents     = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
   const selectedClassName = classes?.find(c => String(c.id) === selectedClass)?.name ?? "";
@@ -534,6 +673,7 @@ export default function FeeVoucher() {
       setSaved(true);
       toast({ title: "Fee records saved", description: `${data.created} records created${data.skipped > 0 ? `, ${data.skipped} skipped (already exist)` : ""}.` });
       loadFeeRecords();
+      setShowWaPrompt(true);
     } catch (e: unknown) {
       toast({ variant: "destructive", title: "Save failed", description: String((e as Error).message) });
     } finally {
@@ -1050,6 +1190,356 @@ export default function FeeVoucher() {
         </div>,
         document.body
       )}
+      {/* ── WhatsApp Voucher Delivery Prompt ── */}
+      <Dialog open={showWaPrompt} onOpenChange={setShowWaPrompt}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-655 font-bold">
+              <MessageCircle className="w-5 h-5 text-green-600" /> Send Vouchers via WhatsApp?
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-gray-700">
+              Fee records for class <strong>{selectedClassName}</strong> have been saved successfully!
+            </p>
+            <p className="text-sm text-gray-600">
+              Would you like to send fee voucher notifications to parents on WhatsApp? This is 100% free and uses a semi-automated queue.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t">
+            <Button variant="outline" onClick={() => setShowWaPrompt(false)}>
+              No, Close
+            </Button>
+            <Button
+              onClick={() => {
+                setShowWaPrompt(false);
+                setWaQueueOpen(true);
+                setWaQueueIndex(0);
+                setWaSentIds({});
+              }}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold animate-pulse"
+            >
+              Yes, Start Sending
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── WhatsApp Voucher Queue Sender Dialog ── */}
+      <Dialog open={waQueueOpen} onOpenChange={setWaQueueOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-green-600 text-lg font-bold">
+              <MessageCircle className="w-5 h-5" /> WhatsApp Voucher Sender ({classStudents.length} Students)
+            </DialogTitle>
+            <DialogDescription>
+              Choose between automatic server-side background sending or manual queue helper.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Mode Switch Tabs */}
+          <div className="flex border-b border-gray-200 mb-4">
+            <button
+              onClick={() => setSendMode("auto")}
+              className={cn(
+                "flex-1 py-2.5 font-bold text-xs text-center border-b-2 transition-all",
+                sendMode === "auto" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Aik Click Sab Ko (Automatic Bulk)
+            </button>
+            <button
+              onClick={() => setSendMode("manual")}
+              className={cn(
+                "flex-1 py-2.5 font-bold text-xs text-center border-b-2 transition-all",
+                sendMode === "manual" ? "border-green-600 text-green-600" : "border-transparent text-gray-500 hover:text-gray-700"
+              )}
+            >
+              Ek Ek Karke (Manual Queue)
+            </button>
+          </div>
+
+          {sendMode === "auto" ? (
+            /* ────────────────────────────────────────────────────────
+               AUTOMATIC SENDER TAB
+            ──────────────────────────────────────────────────────── */
+            <div className="space-y-4 py-1">
+              {waStatus === "disconnected" ? (
+                <div className="text-center p-6 border rounded-xl bg-gray-50 space-y-4">
+                  <WifiOff className="w-12 h-12 text-red-400 mx-auto" />
+                  <div>
+                    <h3 className="font-bold text-sm text-gray-800">WhatsApp is Disconnected</h3>
+                    <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                      Scan the QR code with your WhatsApp linked devices to connect. This establishes a free background automation link on the server.
+                    </p>
+                  </div>
+                  {waQr ? (
+                    <div className="bg-white p-4 border rounded-xl inline-block shadow-sm">
+                      <img src={waQr} alt="WhatsApp QR Code" className="w-52 h-52 mx-auto" />
+                      <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-wider">Scan now using phone</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center p-8">
+                      <Loader2 className="w-8 h-8 animate-spin text-green-600 mb-2" />
+                      <span className="text-xs text-gray-550">Generating connection QR code...</span>
+                    </div>
+                  )}
+                  <div className="pt-2">
+                    <Button onClick={triggerConnect} className="bg-green-650 hover:bg-green-750 text-white font-bold text-xs flex items-center gap-1.5 mx-auto">
+                      <RefreshCw className="w-3.5 h-3.5" /> Start / Refresh QR
+                    </Button>
+                  </div>
+                </div>
+              ) : waStatus === "connecting" ? (
+                <div className="text-center p-12 border rounded-xl bg-gray-50 space-y-3">
+                  <Loader2 className="w-10 h-10 animate-spin text-green-600 mx-auto" />
+                  <p className="font-bold text-xs text-gray-700">Connecting to WhatsApp Web services...</p>
+                </div>
+              ) : (
+                /* Connected view */
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-3">
+                    <div className="flex items-center gap-2">
+                      <Wifi className="w-5 h-5 text-green-600 animate-pulse" />
+                      <div>
+                        <span className="text-xs font-bold text-green-800">WhatsApp connected successfully!</span>
+                        <p className="text-[10px] text-green-650">Ready to dispatch background messages.</p>
+                      </div>
+                    </div>
+                    <Button onClick={triggerDisconnect} variant="outline" size="sm" className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50 text-xs">
+                      Disconnect Account
+                    </Button>
+                  </div>
+
+                  {autoProgress.sending ? (
+                    /* Progress Screen */
+                    <div className="border rounded-xl p-6 bg-gray-50 text-center space-y-4">
+                      <Loader2 className="w-8 h-8 animate-spin text-green-600 mx-auto" />
+                      <div>
+                        <h4 className="font-bold text-sm text-gray-800">Sending Messages in Background</h4>
+                        <p className="text-xs text-gray-400 mt-0.5">Please keep this tab open while sending.</p>
+                      </div>
+                      
+                      {/* Progress Bar */}
+                      <div className="max-w-md mx-auto">
+                        <div className="flex justify-between text-xs text-gray-500 mb-1 font-semibold">
+                          <span>Progress: {autoProgress.sent + autoProgress.failed} / {autoProgress.total}</span>
+                          <span>{Math.round(((autoProgress.sent + autoProgress.failed) / autoProgress.total) * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 h-2.5 rounded-full overflow-hidden">
+                          <div
+                            className="bg-green-500 h-full transition-all duration-500"
+                            style={{ width: `${((autoProgress.sent + autoProgress.failed) / autoProgress.total) * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-center gap-4 text-xs mt-3 text-gray-600">
+                          <span className="text-green-700 font-bold">Sent: {autoProgress.sent}</span>
+                          <span className="text-red-600 font-bold">Failed: {autoProgress.failed}</span>
+                        </div>
+                      </div>
+
+                      <Button onClick={handleStopAutoSending} variant="destructive" className="flex items-center gap-1.5 mx-auto text-xs font-bold">
+                        <Square className="w-3.5 h-3.5" /> Stop Sending
+                      </Button>
+                    </div>
+                  ) : (
+                    /* Not sending screen */
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 border rounded-xl p-4">
+                        <h4 className="text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Language Template</h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => setWaLanguage("urdu")}
+                            className={cn(
+                              "px-4 py-2 rounded-xl text-xs font-bold transition-all border",
+                              waLanguage === "urdu" ? "bg-green-600 text-white border-green-650" : "bg-white text-gray-600 border-gray-200"
+                            )}
+                          >
+                            Urdu Messages (اردو)
+                          </button>
+                          <button
+                            onClick={() => setWaLanguage("english")}
+                            className={cn(
+                              "px-4 py-2 rounded-xl text-xs font-bold transition-all border",
+                              waLanguage === "english" ? "bg-green-600 text-white border-green-650" : "bg-white text-gray-600 border-gray-200"
+                            )}
+                          >
+                            English Messages
+                          </button>
+                        </div>
+                      </div>
+
+                      {autoProgress.total > 0 && !autoProgress.sending && (
+                        /* Results of last send */
+                        <div className={cn(
+                          "border rounded-xl p-4 text-xs",
+                          autoProgress.failed > 0 ? "bg-red-50 border-red-200 text-red-800" : "bg-green-50 border-green-200 text-green-800"
+                        )}>
+                          <p className="font-bold">Sending session finished!</p>
+                          <p className="mt-1">Successfully dispatched: <strong>{autoProgress.sent}</strong> | Failed: <strong>{autoProgress.failed}</strong></p>
+                          {autoProgress.errors.length > 0 && (
+                            <div className="mt-2 bg-white/70 p-2.5 rounded-lg border border-red-200 max-h-24 overflow-y-auto space-y-1">
+                              {autoProgress.errors.map((err, i) => (
+                                <p key={i} className="text-[10px] text-red-700 font-mono">{err}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <Button
+                        onClick={handleStartAutoSending}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-md border-green-700 flex items-center justify-center gap-2"
+                      >
+                        <Play className="w-4 h-4" /> Send to all {classStudents.length} Parents Automatically
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* ────────────────────────────────────────────────────────
+               MANUAL REDIRECT QUEUE TAB
+            ──────────────────────────────────────────────────────── */
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 py-2">
+              {/* Left Queue List */}
+              <div className="md:col-span-5 border rounded-xl p-3 bg-gray-50 max-h-[350px] overflow-y-auto space-y-2">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Students Queue</p>
+                {classStudents.map((student, idx) => {
+                  const isCurrent = idx === waQueueIndex;
+                  const isSent = waSentIds[student.id];
+                  const total = calcTotal(student.id, student.classId ? feeStructureMap[student.classId] : undefined);
+                  return (
+                    <div
+                      key={student.id}
+                      className={cn(
+                        "flex items-center justify-between p-2.5 rounded-lg border text-xs transition-all",
+                        isCurrent
+                          ? "bg-green-50 border-green-300 ring-2 ring-green-100 font-semibold"
+                          : isSent
+                          ? "bg-gray-100 border-gray-200 text-gray-400"
+                          : "bg-white border-gray-200 text-gray-700"
+                      )}
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold flex items-center gap-1.5">
+                          {isSent && <span className="text-green-600 font-bold">✓</span>}
+                          <span className="truncate">{student.name}</span>
+                        </div>
+                        <p className="text-[10px] text-gray-400">PKR {total.toLocaleString()}</p>
+                        {student.phone ? (
+                          <p className="text-[10px] text-gray-500 font-mono mt-0.5">{student.phone}</p>
+                        ) : (
+                          <p className="text-[10px] text-red-500 font-bold mt-0.5">No Phone Number</p>
+                        )}
+                      </div>
+                      {isCurrent && (
+                        <span className="text-[10px] bg-green-600 text-white font-extrabold px-1.5 py-0.5 rounded-md animate-pulse">
+                          CURRENT
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Right Editor / Controller */}
+              <div className="md:col-span-7 flex flex-col gap-3 min-h-[350px]">
+                {waQueueIndex < classStudents.length ? (
+                  <>
+                    <div className="flex justify-between items-center bg-gray-100 p-2 rounded-xl">
+                      <span className="text-xs font-bold text-gray-650">Language:</span>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => setWaLanguage("urdu")}
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg text-xs font-bold transition-all border",
+                            waLanguage === "urdu" ? "bg-green-600 text-white border-green-650" : "bg-white text-gray-600 hover:bg-gray-50 border-gray-200"
+                          )}
+                        >
+                          Urdu (اردو)
+                        </button>
+                        <button
+                          onClick={() => setWaLanguage("english")}
+                          className={cn(
+                            "px-2.5 py-1 rounded-lg text-xs font-bold transition-all border",
+                            waLanguage === "english" ? "bg-green-600 text-white border-green-650" : "bg-white text-gray-600 hover:bg-gray-50 border-gray-200"
+                          )}
+                        >
+                          English
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col gap-1.5">
+                      <label className="text-xs font-bold text-gray-500">Edit Message Preview:</label>
+                      <Textarea
+                        value={waMessageText}
+                        onChange={e => setWaMessageText(e.target.value)}
+                        dir={waLanguage === "urdu" ? "rtl" : "ltr"}
+                        className="flex-1 min-h-[180px] text-sm p-3 font-medium bg-white border border-gray-200 rounded-xl leading-relaxed focus:ring-2 focus:ring-green-150 focus:border-green-400"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2 pt-2">
+                      <div className="flex justify-between items-center text-xs text-gray-500 bg-gray-50 p-2 rounded-lg">
+                        <span>Recipient: <strong>{classStudents[waQueueIndex]?.name}</strong></span>
+                        <span>Phone: <strong>{classStudents[waQueueIndex]?.phone || "N/A"}</strong></span>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            const student = classStudents[waQueueIndex];
+                            const cleanPhone = (student.phone ?? "").replace(/\D/g, "");
+                            const intlPhone = cleanPhone.startsWith("0") ? "92" + cleanPhone.slice(1) : cleanPhone.startsWith("92") ? cleanPhone : "92" + cleanPhone;
+                            const encoded = encodeURIComponent(waMessageText);
+                            const waUrl = intlPhone.length > 4
+                              ? `https://wa.me/${intlPhone}?text=${encoded}`
+                              : `https://wa.me/?text=${encoded}`;
+                            
+                            window.open(waUrl, "_blank");
+
+                            setWaSentIds(prev => ({ ...prev, [student.id]: true }));
+                            setWaQueueIndex(prev => prev + 1);
+                          }}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-sm py-3 rounded-xl shadow-lg border-green-700 flex items-center justify-center gap-2"
+                        >
+                          <MessageCircle className="w-5 h-5" /> Open WhatsApp &amp; Next
+                        </Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => setWaQueueIndex(prev => prev + 1)}
+                          className="text-gray-500 border-gray-200 hover:bg-gray-100"
+                        >
+                          Skip
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-green-50/50 border border-green-100 rounded-2xl">
+                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600 font-bold text-2xl mb-4">
+                      ✓
+                    </div>
+                    <h3 className="text-lg font-bold text-green-800">All Vouchers Notified!</h3>
+                    <p className="text-sm text-green-600 mt-1 max-w-[280px]">
+                      You have successfully completed notifications for all student vouchers.
+                    </p>
+                    <Button
+                      onClick={() => setWaQueueOpen(false)}
+                      className="mt-5 bg-green-600 hover:bg-green-700 text-white font-bold text-xs px-6 py-2.5 rounded-full"
+                    >
+                      Close Dialog
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

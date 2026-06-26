@@ -4,6 +4,7 @@ import { db, usersTable } from "@workspace/db";
 import { sql } from "drizzle-orm";
 import { startAutoBackupScheduler } from "./lib/autoBackup";
 import { hashPassword } from "./lib/auth";
+import { initWhatsApp } from "./lib/whatsapp";
 
 const rawPort = process.env["PORT"];
 
@@ -55,6 +56,7 @@ runMigrations().then(() => {
       }
       logger.info({ port }, "Server listening");
       startAutoBackupScheduler();
+      initWhatsApp().catch(err => logger.error({ err }, "WhatsApp init failed"));
     });
   });
 });

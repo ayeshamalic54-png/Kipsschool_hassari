@@ -7,6 +7,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import type { Request } from "express";
+import { compressImageIfBase64 } from "../lib/image";
 
 type AuthReq = Request & { user: Record<string, unknown> };
 
@@ -117,6 +118,9 @@ router.post("/", requireAuth, async (req, res) => {
     if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
 
     const data = req.body;
+    if (data && data.imageUrl) {
+      data.imageUrl = await compressImageIfBase64(data.imageUrl);
+    }
     const admissionNumber = await generateAdmissionNumber();
     // username is exactly the admission number (e.g. KIPS-2026-3004)
     const username = admissionNumber;
@@ -311,7 +315,11 @@ router.patch("/:id", requireAuth, async (req, res) => {
     const reqUser = (req as any).user;
     if (reqUser.role === "student") { res.status(403).json({ error: "Forbidden" }); return; }
 
-    const [updated] = await db.update(studentsTable).set({ ...req.body, updatedAt: new Date() }).where(eq(studentsTable.id, Number(req.params.id))).returning();
+    const updates = { ...req.body };
+    if (updates.imageUrl) {
+      updates.imageUrl = await compressImageIfBase64(updates.imageUrl);
+    }
+    const [updated] = await db.update(studentsTable).set({ ...updates, updatedAt: new Date() }).where(eq(studentsTable.id, Number(req.params.id))).returning();
     if (!updated) { res.status(404).json({ error: "Student not found" }); return; }
     res.json({ ...updated, feeAmount: updated.feeAmount ? Number(updated.feeAmount) : null });
   } catch (err) {

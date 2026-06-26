@@ -16,6 +16,7 @@ import feeStructureRouter from "./fee-structure";
 import settingsRouter from "./settings";
 import feeVouchersRouter from "./fee-vouchers";   // ← NEW
 import arrearsRouter from "./arrears";             // ← NEW
+import whatsappRouter from "./whatsapp";
 
 const router: IRouter = Router();
 
@@ -36,5 +37,6 @@ router.use("/fee-structures", feeStructureRouter);
 router.use("/settings", settingsRouter);
 router.use("/fee-vouchers", feeVouchersRouter);   // ← NEW
 router.use("/arrears", arrearsRouter);             // ← NEW
+router.use("/whatsapp", whatsappRouter);
 
 export default router;

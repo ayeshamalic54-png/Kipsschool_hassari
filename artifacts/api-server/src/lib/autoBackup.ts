@@ -25,35 +25,6 @@ async function sendBackupEmail(filePath: string, filename: string) {
     return;
   }
 
-  let attachmentPath = filePath;
-  let isTempCreated = false;
-  const tempPath = filePath.replace(".json", "-email-stripped.json");
-
-  try {
-    const content = fs.readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(content);
-    if (parsed.data) {
-      if (Array.isArray(parsed.data.students)) {
-        parsed.data.students = parsed.data.students.map((s: any) => ({
-          ...s,
-          imageUrl: s.imageUrl && s.imageUrl.startsWith("data:") ? "[image_stripped]" : s.imageUrl
-        }));
-      }
-      if (Array.isArray(parsed.data.staff)) {
-        parsed.data.staff = parsed.data.staff.map((s: any) => ({
-          ...s,
-          imageUrl: s.imageUrl && s.imageUrl.startsWith("data:") ? "[image_stripped]" : s.imageUrl
-        }));
-      }
-      fs.writeFileSync(tempPath, JSON.stringify(parsed, null, 2));
-      attachmentPath = tempPath;
-      isTempCreated = true;
-      logger.info("Created stripped backup file for email attachment (removed large base64 student/staff photos)");
-    }
-  } catch (stripErr) {
-    logger.warn({ err: stripErr }, "Failed to strip images from backup for email. Sending original instead.");
-  }
-
   try {
     const transporter = nodemailer.createTransport({
       host,
@@ -69,11 +40,11 @@ async function sendBackupEmail(filePath: string, filename: string) {
       from: `"Kips School Backup" <${user}>`,
       to: recipient,
       subject: `Daily Database Backup - ${new Date().toLocaleDateString("en-PK", { timeZone: "Asia/Karachi" })}`,
-      text: `Assalamu Alaikum,\n\nAttached is the automatic daily database backup file for Kips School Hassari, generated on ${new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}.\n\nNote: Large student/staff photo data has been stripped from this email attachment to comply with email size limits. The full backup file containing photos remains saved locally on the server.\n\nBest regards,\nSchool ERP System`,
+      text: `Assalamu Alaikum,\n\nAttached is the automatic daily database backup file for Kips School Hassari, generated on ${new Date().toLocaleString("en-PK", { timeZone: "Asia/Karachi" })}.\n\nBest regards,\nSchool ERP System`,
       attachments: [
         {
           filename: filename,
-          path: attachmentPath,
+          path: filePath,
         },
       ],
     };
@@ -84,14 +55,6 @@ async function sendBackupEmail(filePath: string, filename: string) {
   } catch (emailErr: any) {
     logger.error({ err: emailErr }, "Failed to send backup email");
     autoBackupState.lastEmailStatus = `error: ${emailErr.message || String(emailErr)}`;
-  } finally {
-    if (isTempCreated) {
-      try {
-        fs.unlinkSync(tempPath);
-      } catch (cleanupErr) {
-        logger.warn({ err: cleanupErr }, "Failed to delete temporary email backup file");
-      }
-    }
   }
 }
 
@@ -132,6 +95,7 @@ async function runAutoBackup() {
         siblingDiscount: studentsTable.siblingDiscount,
         status: studentsTable.status,
         username: studentsTable.username,
+        imageUrl: studentsTable.imageUrl,
         createdAt: studentsTable.createdAt,
         updatedAt: studentsTable.updatedAt,
       }).from(studentsTable),
@@ -151,6 +115,7 @@ async function runAutoBackup() {
         joinDate: staffTable.joinDate,
         status: staffTable.status,
         username: staffTable.username,
+        imageUrl: staffTable.imageUrl,
         createdAt: staffTable.createdAt,
         updatedAt: staffTable.updatedAt,
       }).from(staffTable),
@@ -163,8 +128,8 @@ async function runAutoBackup() {
       db.select().from(settingsTable),
     ]);
 
-    const students = rawStudents.map(s => ({ ...s, imageUrl: null }));
-    const staff = rawStaff.map(s => ({ ...s, imageUrl: null }));
+    const students = rawStudents;
+    const staff = rawStaff;
 
     const backup = {
       version: "1.0",
