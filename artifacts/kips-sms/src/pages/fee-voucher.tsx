@@ -277,6 +277,9 @@ export default function FeeVoucher() {
 
   const feeStructureMap   = Object.fromEntries(feeStructures.map(f => [f.classId, f]));
   const selectedStructure = selectedClass ? feeStructureMap[Number(selectedClass)] : undefined;
+  const classStudents     = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
+  const selectedClassName = classes?.find(c => String(c.id) === selectedClass)?.name ?? "";
+  const monthLabel        = month ? new Date(month + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" }) : "";
 
   useEffect(() => {
     if (selectedStructure) {
@@ -468,9 +471,6 @@ export default function FeeVoucher() {
     return () => clearInterval(interval);
   }, [waQueueOpen]);
 
-  const classStudents     = allStudents?.filter(s => String(s.classId) === selectedClass && s.status === "active") ?? [];
-  const selectedClassName = classes?.find(c => String(c.id) === selectedClass)?.name ?? "";
-  const monthLabel        = month ? new Date(month + "-01").toLocaleDateString("en-PK", { month: "long", year: "numeric" }) : "";
 
   const getEdit = (id: number): VoucherEdit =>
     edits[id] ?? { feeOverride: "", examOverride: "", annualOverride: "", transportOverride: "", arrears: "", fine: "", discount: "", note: "" };
