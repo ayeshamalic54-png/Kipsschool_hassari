@@ -2,14 +2,10 @@ name: Trigger Auto Daily Backup
 
 on:
   schedule:
-    # 12:35 AM Pakistan Time (PKT) is 7:35 PM UTC (19:35)
-    - cron: '35 19 * * *'
-    # Also run at 10:00 AM PKT (5:00 AM UTC) and 3:00 PM PKT (10:00 AM UTC)
+    # 10:00 AM PKT is 5:00 AM UTC
     - cron: '0 5 * * *'
+    # 3:00 PM PKT is 10:00 AM UTC
     - cron: '0 10 * * *'
-    # Temporary check times: 2:12 AM PKT (21:12 UTC) and 2:15 AM PKT (21:15 UTC)
-    - cron: '12 21 * * *'
-    - cron: '15 21 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab
 
 jobs:
