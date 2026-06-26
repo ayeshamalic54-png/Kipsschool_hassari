@@ -629,9 +629,20 @@ export default function FeeDefaulters() {
                           className="border-white data-[state=checked]:bg-white data-[state=checked]:text-red-600"
                         />
                       </th>
-                      {["#", "Adm #", "Student Name", "Class", "Month(s)", "Amount Due", "Fine", "Due Date", "Phone", "Action"].map(h => (
-                        <th key={h} className="text-left py-3 px-3 font-semibold text-xs uppercase tracking-wide whitespace-nowrap">{h}</th>
-                      ))}
+                      {["#", "Adm #", "Student Name", "Class", "Month(s)", "Amount Due", "Fine", "Due Date", "Phone", "Action"].map(h => {
+                        const isAction = h === "Action";
+                        return (
+                          <th
+                            key={h}
+                            className={cn(
+                              "text-left py-3 px-3 font-semibold text-xs uppercase tracking-wide whitespace-nowrap",
+                              isAction && "sticky right-0 bg-[#be123c] z-20 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.2)]"
+                            )}
+                          >
+                            {h}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
@@ -642,7 +653,17 @@ export default function FeeDefaulters() {
                       const isSelected = !!selectedIds[fee.studentId ?? 0];
 
                       return (
-                        <tr key={fee.id} className={`border-b hover:bg-red-50/20 transition-colors ${isSelected ? "bg-red-50/30" : i%2===0?"bg-white":"bg-gray-50/40"}`}>
+                        <tr
+                          key={fee.id}
+                          className={cn(
+                            "group border-b transition-colors",
+                            isSelected 
+                              ? "bg-[#fef2f2] hover:bg-[#fee2e2]" 
+                              : i % 2 === 0 
+                              ? "bg-white hover:bg-[#fdf2f2]" 
+                              : "bg-[#f9fafb] hover:bg-[#fdf2f2]"
+                          )}
+                        >
                           <td className="py-3.5 px-3">
                             <Checkbox
                               checked={isSelected}
@@ -690,7 +711,14 @@ export default function FeeDefaulters() {
                               <span className="text-gray-300">—</span>
                             )}
                           </td>
-                          <td className="py-3.5 px-3 whitespace-nowrap">
+                          <td className={cn(
+                            "py-3.5 px-3 whitespace-nowrap sticky right-0 z-10 shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.15)] transition-colors",
+                            isSelected 
+                              ? "bg-[#fef2f2] group-hover:bg-[#fee2e2]" 
+                              : i % 2 === 0 
+                              ? "bg-white group-hover:bg-[#fdf2f2]" 
+                              : "bg-[#f9fafb] group-hover:bg-[#fdf2f2]"
+                          )}>
                             <a
                               href={waMsg}
                               target="_blank"
