@@ -44,14 +44,6 @@ jobs:
           mkdir -p backups
           curl -f -s -S -o "backups/auto-backup-${{ env.DATE_STR }}.json" "$APP_URL/api/admin/auto-backup/trigger?key=Lb6627pOzvpNud6bBXq/eFYL8LRfLRQFNMF1Py2LKec=&download=true"
 
-      - name: Commit and Push Backup JSON to GitHub
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add backups/
-          git commit -m "chore(backup): auto save database backup ${{ env.DATE_STR }} [skip ci]" || echo "No changes to commit"
-          git push
-
       - name: Check Email Secret Status
         run: |
           if [ -z "${{ secrets.BACKUP_EMAIL_PASSWORD }}" ]; then
@@ -76,3 +68,11 @@ jobs:
           from: Kips School Backup <ayeshamalic54@gmail.com>
           body: Attached is the automatic daily database backup file for Kips School Hassari, generated on ${{ env.DATE_STR }}.
           attachments: backups/auto-backup-${{ env.DATE_STR }}.json
+
+      - name: Commit and Push Backup JSON to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add backups/
+          git commit -m "chore(backup): auto save database backup ${{ env.DATE_STR }} [skip ci]" || echo "No changes to commit"
+          git push || echo "::warning:: Git push failed. Please go to Repository Settings -> Actions -> General -> Workflow permissions, select 'Read and write permissions', and click Save."
