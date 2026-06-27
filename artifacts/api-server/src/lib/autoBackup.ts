@@ -34,7 +34,11 @@ async function sendBackupEmail(filePath: string, filename: string) {
         user,
         pass,
       },
-    });
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 20000,
+      family: 4, // Force IPv4 to prevent ENETUNREACH on IPv6 in environments like Render/AWS
+    } as any);
 
     const mailOptions = {
       from: `"Kips School Backup" <${user}>`,
