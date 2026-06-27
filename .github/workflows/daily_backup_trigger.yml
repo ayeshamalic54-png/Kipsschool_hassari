@@ -8,11 +8,23 @@ on:
     - cron: '0 10 * * *'
   workflow_dispatch: # Allows manual trigger from GitHub Actions tab
 
+permissions:
+  contents: write
+
 jobs:
   trigger-backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Backup Endpoint
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set Date String
+        run: |
+          # Set date string in PKT timezone (UTC+5)
+          DATE_STR=$(TZ="Asia/Karachi" date +'%Y-%m-%d-%H-%M')
+          echo "DATE_STR=$DATE_STR" >> $GITHUB_ENV
+
+      - name: Trigger and Download Backup JSON
         run: |
           APP_URL="${{ secrets.APP_URL }}"
           if [ -z "$APP_URL" ]; then
@@ -24,7 +36,38 @@ jobs:
           # Trim trailing slash if present
           APP_URL=$(echo "$APP_URL" | sed 's/\/$//')
           
-          echo "Triggering backup at: $APP_URL/api/admin/auto-backup/trigger"
+          echo "Downloading backup from: $APP_URL/api/admin/auto-backup/trigger"
           
-          # Call the backup trigger endpoint with curl.
-          curl -f -s -S -X GET "$APP_URL/api/admin/auto-backup/trigger?key=Lb6627pOzvpNud6bBXq/eFYL8LRfLRQFNMF1Py2LKec="
+          mkdir -p backups
+          curl -f -s -S -o "backups/auto-backup-${{ env.DATE_STR }}.json" "$APP_URL/api/admin/auto-backup/trigger?key=Lb6627pOzvpNud6bBXq/eFYL8LRfLRQFNMF1Py2LKec=&download=true"
+
+      - name: Commit and Push Backup JSON to GitHub
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add backups/
+          git commit -m "chore(backup): auto save database backup ${{ env.DATE_STR }} [skip ci]" || echo "No changes to commit"
+          git push
+
+      - name: Check Email Secret Status
+        run: |
+          if [ -z "${{ secrets.BACKUP_EMAIL_PASSWORD }}" ]; then
+            echo "::warning:: BACKUP_EMAIL_PASSWORD secret is not configured. Email backup will be skipped."
+            echo "To enable email backups, please go to your GitHub repository Settings -> Secrets and variables -> Actions, and add a Repository secret named BACKUP_EMAIL_PASSWORD with your Gmail app password (gxsxpbqetudobrmm)."
+          else
+            echo "BACKUP_EMAIL_PASSWORD secret is configured. Proceeding to send email backup..."
+          fi
+
+      - name: Send Email Backup
+        if: ${{ secrets.BACKUP_EMAIL_PASSWORD != '' }}
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ayeshamalic54@gmail.com
+          password: ${{ secrets.BACKUP_EMAIL_PASSWORD }}
+          subject: Daily Database Backup - ${{ env.DATE_STR }}
+          to: ayeshamalic54@gmail.com
+          from: Kips School Backup <ayeshamalic54@gmail.com>
+          body: Attached is the automatic daily database backup file for Kips School Hassari, generated on ${{ env.DATE_STR }}.
+          attachments: backups/auto-backup-${{ env.DATE_STR }}.json

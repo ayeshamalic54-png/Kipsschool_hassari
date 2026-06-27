@@ -10,7 +10,7 @@ import { requireAuth, hashPassword } from "../lib/auth";
 import type { Request } from "express";
 import fs from "fs";
 import path from "path";
-import { autoBackupState, runAutoBackup } from "../lib/autoBackup";
+import { autoBackupState, runAutoBackup, generateBackupPayload } from "../lib/autoBackup";
 import { logger } from "../lib/logger";
 
 type AuthReq = Request & { user: Record<string, unknown> };
@@ -453,8 +453,13 @@ router.get("/auto-backup/trigger", async (req, res) => {
     return;
   }
   try {
-    await runAutoBackup();
-    res.json({ message: "Backup triggered successfully", state: autoBackupState });
+    if (req.query.download === "true") {
+      const backupData = await generateBackupPayload();
+      res.json(backupData);
+    } else {
+      await runAutoBackup();
+      res.json({ message: "Backup triggered successfully", state: autoBackupState });
+    }
   } catch (err) {
     res.status(500).json({ error: "Backup trigger failed" });
   }
