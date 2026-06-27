@@ -14,8 +14,8 @@ const BACKUP_DIR = path.resolve(process.cwd(), "../../backups");
 
 async function sendBackupEmail(filePath: string, filename: string) {
   const host = process.env.BACKUP_EMAIL_HOST || "smtp.gmail.com";
-  const port = Number(process.env.BACKUP_EMAIL_PORT || "465");
-  const secure = process.env.BACKUP_EMAIL_SECURE !== "false";
+  const port = Number(process.env.BACKUP_EMAIL_PORT || "587");
+  const secure = process.env.BACKUP_EMAIL_SECURE === "true"; // Defaults to false (STARTTLS on port 587)
   const user = process.env.BACKUP_EMAIL_USER || "ayeshamalic54@gmail.com";
   const pass = process.env.BACKUP_EMAIL_PASSWORD || "gxsxpbqetudobrmm";
   const recipient = process.env.BACKUP_EMAIL_RECIPIENT || "ayeshamalic54@gmail.com";
