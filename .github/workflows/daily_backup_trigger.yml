@@ -1,9 +1,6 @@
 name: Trigger Auto Daily Backup
 
 on:
-  push:
-    branches:
-      - main
   schedule:
     # 10:00 AM PKT is 5:00 AM UTC
     - cron: '0 5 * * *'
@@ -71,8 +68,13 @@ jobs:
 
       - name: Commit and Push Backup JSON to GitHub
         run: |
+          set +e
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add backups/
-          git commit -m "chore(backup): auto save database backup ${{ env.DATE_STR }} [skip ci]" || echo "No changes to commit"
-          git push || echo "::warning:: Git push failed. Please go to Repository Settings -> Actions -> General -> Workflow permissions, select 'Read and write permissions', and click Save."
+          git commit -m "chore(backup): auto save database backup ${{ env.DATE_STR }} [skip ci]"
+          git push
+          if [ $? -ne 0 ]; then
+            echo "::warning:: Git push failed. Please go to Repository Settings -> Actions -> General -> Workflow permissions, select 'Read and write permissions', and click Save."
+          fi
+          exit 0
