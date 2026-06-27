@@ -77,75 +77,78 @@ function ensureBackupDir() {
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
 
+export async function generateBackupPayload() {
+  const [rawStudents, fees, attendance, exams, examResults, rawStaff, salaries, accountEntries, certificates, classes, users, feeStructures, settings] = await Promise.all([
+    db.select({
+      id: studentsTable.id,
+      admissionNumber: studentsTable.admissionNumber,
+      name: studentsTable.name,
+      fatherName: studentsTable.fatherName,
+      motherName: studentsTable.motherName,
+      dateOfBirth: studentsTable.dateOfBirth,
+      gender: studentsTable.gender,
+      address: studentsTable.address,
+      phone: studentsTable.phone,
+      emergencyContact: studentsTable.emergencyContact,
+      classId: studentsTable.classId,
+      section: studentsTable.section,
+      rollNumber: studentsTable.rollNumber,
+      feeAmount: studentsTable.feeAmount,
+      siblingDiscount: studentsTable.siblingDiscount,
+      status: studentsTable.status,
+      username: studentsTable.username,
+      imageUrl: studentsTable.imageUrl,
+      createdAt: studentsTable.createdAt,
+      updatedAt: studentsTable.updatedAt,
+    }).from(studentsTable),
+    db.select().from(feesTable),
+    db.select().from(attendanceTable),
+    db.select().from(examsTable),
+    db.select().from(examResultsTable),
+    db.select({
+      id: staffTable.id,
+      name: staffTable.name,
+      role: staffTable.role,
+      phone: staffTable.phone,
+      email: staffTable.email,
+      address: staffTable.address,
+      subject: staffTable.subject,
+      salary: staffTable.salary,
+      joinDate: staffTable.joinDate,
+      status: staffTable.status,
+      username: staffTable.username,
+      imageUrl: staffTable.imageUrl,
+      createdAt: staffTable.createdAt,
+      updatedAt: staffTable.updatedAt,
+    }).from(staffTable),
+    db.select().from(salariesTable),
+    db.select().from(accountEntriesTable),
+    db.select().from(certificatesTable),
+    db.select().from(classesTable),
+    db.select({ id: usersTable.id, username: usersTable.username, name: usersTable.name, role: usersTable.role, email: usersTable.email }).from(usersTable),
+    db.select().from(feeStructuresTable),
+    db.select().from(settingsTable),
+  ]);
+
+  const students = rawStudents;
+  const staff = rawStaff;
+
+  return {
+    version: "1.0",
+    timestamp: new Date().toISOString(),
+    note: "auto-daily-backup",
+    data: { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings },
+  };
+}
+
 async function runAutoBackup() {
   try {
     ensureBackupDir();
-    const [rawStudents, fees, attendance, exams, examResults, rawStaff, salaries, accountEntries, certificates, classes, users, feeStructures, settings] = await Promise.all([
-      db.select({
-        id: studentsTable.id,
-        admissionNumber: studentsTable.admissionNumber,
-        name: studentsTable.name,
-        fatherName: studentsTable.fatherName,
-        motherName: studentsTable.motherName,
-        dateOfBirth: studentsTable.dateOfBirth,
-        gender: studentsTable.gender,
-        address: studentsTable.address,
-        phone: studentsTable.phone,
-        emergencyContact: studentsTable.emergencyContact,
-        classId: studentsTable.classId,
-        section: studentsTable.section,
-        rollNumber: studentsTable.rollNumber,
-        feeAmount: studentsTable.feeAmount,
-        siblingDiscount: studentsTable.siblingDiscount,
-        status: studentsTable.status,
-        username: studentsTable.username,
-        imageUrl: studentsTable.imageUrl,
-        createdAt: studentsTable.createdAt,
-        updatedAt: studentsTable.updatedAt,
-      }).from(studentsTable),
-      db.select().from(feesTable),
-      db.select().from(attendanceTable),
-      db.select().from(examsTable),
-      db.select().from(examResultsTable),
-      db.select({
-        id: staffTable.id,
-        name: staffTable.name,
-        role: staffTable.role,
-        phone: staffTable.phone,
-        email: staffTable.email,
-        address: staffTable.address,
-        subject: staffTable.subject,
-        salary: staffTable.salary,
-        joinDate: staffTable.joinDate,
-        status: staffTable.status,
-        username: staffTable.username,
-        imageUrl: staffTable.imageUrl,
-        createdAt: staffTable.createdAt,
-        updatedAt: staffTable.updatedAt,
-      }).from(staffTable),
-      db.select().from(salariesTable),
-      db.select().from(accountEntriesTable),
-      db.select().from(certificatesTable),
-      db.select().from(classesTable),
-      db.select({ id: usersTable.id, username: usersTable.username, name: usersTable.name, role: usersTable.role, email: usersTable.email }).from(usersTable),
-      db.select().from(feeStructuresTable),
-      db.select().from(settingsTable),
-    ]);
-
-    const students = rawStudents;
-    const staff = rawStaff;
-
-    const backup = {
-      version: "1.0",
-      timestamp: new Date().toISOString(),
-      note: "auto-daily-backup",
-      data: { students, fees, attendance, exams, examResults, staff, salaries, accountEntries, certificates, classes, users, feeStructures, settings },
-    };
-
+    const backup = await generateBackupPayload();
     const filename = `auto-backup-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.json`;
     const filePath = path.join(BACKUP_DIR, filename);
     fs.writeFileSync(filePath, JSON.stringify(backup, null, 2));
-    logger.info({ filename, students: students.length }, "Auto daily backup saved");
+    logger.info({ filename, students: backup.data.students.length }, "Auto daily backup saved");
 
     // Email backup as attachment
     await sendBackupEmail(filePath, filename);
