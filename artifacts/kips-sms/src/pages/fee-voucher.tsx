@@ -1362,7 +1362,7 @@ export default function FeeVoucher() {
                         onClick={handleStartAutoSending}
                         className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-md border-green-700 flex items-center justify-center gap-2"
                       >
-                        <Play className="w-4 h-4" /> Send to all ${classStudents.length} Parents Automatically
+                        <Play className="w-4 h-4" /> Send to all {classStudents.length} Parents Automatically
                       </Button>
                     </div>
                   )}
