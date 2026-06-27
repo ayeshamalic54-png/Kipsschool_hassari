@@ -62,7 +62,7 @@ jobs:
           fi
 
       - name: Send Email Backup
-        if: ${{ secrets.BACKUP_EMAIL_PASSWORD != '' }}
+        if: "${{ secrets.BACKUP_EMAIL_PASSWORD != '' }}"
         uses: dawidd6/action-send-mail@v3
         with:
           server_address: smtp.gmail.com
