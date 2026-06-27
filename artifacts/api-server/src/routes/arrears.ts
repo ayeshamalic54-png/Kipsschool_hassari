@@ -27,6 +27,7 @@ async function enrichFee(fee: Record<string, unknown>) {
       admissionNumber: studentsTable.admissionNumber,
       classId: studentsTable.classId,
       fatherName: studentsTable.fatherName,
+      phone: studentsTable.phone,
       status: studentsTable.status,
     })
     .from(studentsTable)
@@ -54,6 +55,7 @@ async function enrichFee(fee: Record<string, unknown>) {
     studentName: student.name,
     admissionNumber: student.admissionNumber,
     fatherName: student.fatherName ?? null,
+    phone: student.phone ?? null,
     classId: student.classId ?? null,
     className,
     studentStatus: student.status,
@@ -84,6 +86,7 @@ router.get("/", requireAuth, async (req, res) => {
         studentName: studentsTable.name,
         admissionNumber: studentsTable.admissionNumber,
         fatherName: studentsTable.fatherName,
+        phone: studentsTable.phone,
         classId: studentsTable.classId,
         studentStatus: studentsTable.status,
         className: classesTable.name,
