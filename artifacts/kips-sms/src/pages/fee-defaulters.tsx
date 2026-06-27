@@ -795,38 +795,7 @@ export default function FeeDefaulters() {
                AUTOMATIC SENDER TAB
             ──────────────────────────────────────────────────────── */
             <div className="space-y-4 py-1">
-              {waStatus === "disconnected" ? (
-                <div className="text-center p-6 border rounded-xl bg-gray-50 space-y-4">
-                  <WifiOff className="w-12 h-12 text-red-400 mx-auto" />
-                  <div>
-                    <h3 className="font-bold text-sm text-gray-800">WhatsApp is Disconnected</h3>
-                    <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                      Scan the QR code with your WhatsApp linked devices to connect. This establishes a free background automation link on the server.
-                    </p>
-                  </div>
-                  {waQr ? (
-                    <div className="bg-white p-4 border rounded-xl inline-block shadow-sm">
-                      <img src={waQr} alt="WhatsApp QR Code" className="w-52 h-52 mx-auto" />
-                      <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-wider">Scan now using phone</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-8">
-                      <Loader2 className="w-8 h-8 animate-spin text-green-600 mb-2" />
-                      <span className="text-xs text-gray-550">Generating connection QR code...</span>
-                    </div>
-                  )}
-                  <div className="pt-2">
-                    <Button onClick={triggerConnect} className="bg-green-650 hover:bg-green-750 text-white font-bold text-xs flex items-center gap-1.5 mx-auto">
-                      <RefreshCw className="w-3.5 h-3.5" /> Start / Refresh QR
-                    </Button>
-                  </div>
-                </div>
-              ) : waStatus === "connecting" ? (
-                <div className="text-center p-12 border rounded-xl bg-gray-50 space-y-3">
-                  <Loader2 className="w-10 h-10 animate-spin text-green-600 mx-auto" />
-                  <p className="font-bold text-xs text-gray-700">Connecting to WhatsApp Web services...</p>
-                </div>
-              ) : (
+              {waStatus === "connected" ? (
                 /* Connected view */
                 <div className="space-y-4">
                   <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-3">
@@ -853,7 +822,7 @@ export default function FeeDefaulters() {
                       
                       {/* Progress Bar */}
                       <div className="max-w-md mx-auto">
-                        <div className="flex justify-between text-xs text-gray-500 mb-1 font-semibold">
+                        <div className="flex justify-between text-xs text-gray-550 mb-1 font-semibold">
                           <span>Progress: {autoProgress.sent + autoProgress.failed} / {autoProgress.total}</span>
                           <span>{Math.round(((autoProgress.sent + autoProgress.failed) / autoProgress.total) * 100)}%</span>
                         </div>
@@ -880,19 +849,19 @@ export default function FeeDefaulters() {
                         <h4 className="text-xs font-bold text-gray-700 mb-2 uppercase tracking-wide">Language Template</h4>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => setTemplateLanguage("urdu")}
+                            onClick={() => setWaLanguage("urdu")}
                             className={cn(
                               "px-4 py-2 rounded-xl text-xs font-bold transition-all border",
-                              templateLanguage === "urdu" ? "bg-green-600 text-white border-green-650" : "bg-white text-gray-600 border-gray-200"
+                              waLanguage === "urdu" ? "bg-green-650 text-white border-green-700" : "bg-white text-gray-650 border-gray-200"
                             )}
                           >
                             Urdu Messages (اردو)
                           </button>
                           <button
-                            onClick={() => setTemplateLanguage("english")}
+                            onClick={() => setWaLanguage("english")}
                             className={cn(
                               "px-4 py-2 rounded-xl text-xs font-bold transition-all border",
-                              templateLanguage === "english" ? "bg-green-600 text-white border-green-650" : "bg-white text-gray-600 border-gray-200"
+                              waLanguage === "english" ? "bg-green-650 text-white border-green-700" : "bg-white text-gray-650 border-gray-200"
                             )}
                           >
                             English Messages
@@ -922,10 +891,42 @@ export default function FeeDefaulters() {
                         onClick={handleStartAutoSending}
                         className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3.5 rounded-xl shadow-md border-green-700 flex items-center justify-center gap-2"
                       >
-                        <Play className="w-4 h-4" /> Send to all {queueStudents.length} Parents Automatically
+                        <Play className="w-4 h-4" /> Send to all ${queueStudents.length} Parents Automatically
                       </Button>
                     </div>
                   )}
+                </div>
+              ) : waQr ? (
+                /* QR Code view */
+                <div className="text-center p-6 border rounded-xl bg-gray-50 space-y-4">
+                  <WifiOff className="w-12 h-12 text-red-400 mx-auto" />
+                  <div>
+                    <h3 className="font-bold text-sm text-gray-800">Scan QR Code to Connect</h3>
+                    <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
+                      Scan the QR code with your WhatsApp linked devices to connect. This establishes a free background automation link on the server.
+                    </p>
+                  </div>
+                  <div className="bg-white p-4 border rounded-xl inline-block shadow-sm">
+                    <img src={waQr} alt="WhatsApp QR Code" className="w-52 h-52 mx-auto" />
+                    <p className="text-[10px] text-gray-400 mt-2 font-bold uppercase tracking-wider">Scan now using phone</p>
+                  </div>
+                  <div className="pt-2">
+                    <Button onClick={triggerConnect} className="bg-green-650 hover:bg-green-750 text-white font-bold text-xs flex items-center gap-1.5 mx-auto">
+                      <RefreshCw className="w-3.5 h-3.5" /> Start / Refresh QR
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Connecting loader view */
+                <div className="text-center p-12 border rounded-xl bg-gray-50 space-y-3">
+                  <Loader2 className="w-10 h-10 animate-spin text-green-600 mx-auto" />
+                  <p className="font-bold text-xs text-gray-700">Connecting to WhatsApp Web services...</p>
+                  <p className="text-[10px] text-gray-400">If QR code doesn't load in 10 seconds, click Refresh below.</p>
+                  <div className="pt-2">
+                    <Button onClick={triggerConnect} className="bg-green-650 hover:bg-green-750 text-white font-bold text-xs flex items-center gap-1.5 mx-auto">
+                      <RefreshCw className="w-3.5 h-3.5" /> Start / Refresh QR
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
